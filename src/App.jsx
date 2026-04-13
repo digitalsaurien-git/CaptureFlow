@@ -14,6 +14,41 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// --- Hooks ---
+
+const useSpeechRecognition = (onResult) => {
+  const [isListening, setIsListening] = useState(false);
+  
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Votre navigateur ne supporte pas la reconnaissance vocale.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'fr-FR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = (event) => {
+      console.error(event.error);
+      setIsListening(false);
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      onResult(transcript);
+    };
+
+    recognition.start();
+  };
+
+  return { isListening, startListening };
+};
+
+
 // --- Sub-components ---
 
 const BottomNav = ({ activeTab, setActiveTab }) => (
@@ -69,6 +104,10 @@ const EntryCard = ({ entry, onClick }) => (
 
 const HomeScreen = ({ entries, onAddEntry, onEntryClick }) => {
   const [inputText, setInputText] = useState('');
+  const { isListening, startListening } = useSpeechRecognition((transcript) => {
+    onAddEntry(transcript);
+  });
+
 
   const handleAdd = () => {
     if (inputText.trim()) {
@@ -86,13 +125,30 @@ const HomeScreen = ({ entries, onAddEntry, onEntryClick }) => {
 
       <section className="glass-card" style={{ padding: '24px', marginBottom: '32px', textAlign: 'center' }}>
         <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: '500' }}>Que voulez-vous capturer ?</h2>
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
           <button 
-            style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--primary)', color: 'var(--on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(167, 200, 255, 0.4)' }}
-            onClick={() => alert("Dictée vocale (Web Speech API) bientôt disponible !")}
+            style={{ 
+              width: '64px', height: '64px', borderRadius: '50%', 
+              background: isListening ? '#ff4b4b' : 'var(--primary)', 
+              color: isListening ? 'white' : 'var(--on-primary)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              boxShadow: isListening ? '0 0 20px rgba(255, 75, 75, 0.4)' : '0 0 20px rgba(167, 200, 255, 0.4)',
+              transition: 'all 0.3s ease'
+            }}
+            onClick={startListening}
           >
-            <Mic size={32} />
+            {isListening ? (
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ repeat: Infinity, duration: 1 }}
+              >
+                <Mic size={32} />
+              </motion.div>
+            ) : (
+              <Mic size={32} />
+            )}
           </button>
+
           <div style={{ flex: 1, position: 'relative' }}>
             <input 
               value={inputText}
