@@ -1,0 +1,162 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Color Palette - Nocturnal Architect */
+  --bg-color: #060e20;
+  --surface: #060e20;
+  --surface-low: #06122d;
+  --surface-high: #031d4b;
+  --surface-highest: #00225a;
+  
+  --primary: #a7c8ff;
+  --primary-container: #1b477d;
+  --on-primary: #114076;
+  
+  --secondary: #909fb4;
+  --secondary-container: #2e3c4e;
+  
+  --tertiary: #edecff;
+  
+  --on-surface: #dee5ff;
+  --on-surface-variant: #91aaeb;
+  
+  --error: #ee7d77;
+  
+  /* Glassmorphism */
+  --glass-bg: rgba(0, 34, 90, 0.4);
+  --glass-blur: blur(12px);
+  --glass-border: rgba(43, 70, 128, 0.2);
+  
+  /* Typography */
+  --font-family: 'Inter', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--on-surface);
+  font-family: var(--font-family);
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  background: var(--surface-highest);
+  border: none;
+  color: var(--on-surface);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+/* Glassmorphism Classes */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 70px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: rgba(6, 14, 32, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border);
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--on-surface-variant);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+.nav-item.active {
+  color: var(--primary);
+}
+
+.nav-item i {
+  font-size: 24px;
+}
+
+/* Layout Containers */
+.app-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px;
+  padding-bottom: 90px;
+}
+
+.screen-header {
+  margin-top: 24px;
+  margin-bottom: 32px;
+}
+
+.screen-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--on-surface);
+}
+
+.screen-header p {
+  color: var(--on-surface-variant);
+  font-size: 14px;
+}
+
+/* Utility Classes */
+.tag {
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--surface-high);
+  color: var(--primary);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.status-to-do { background-color: var(--primary); }
+.status-in-progress { background-color: #ffd884; }
+.status-done { background-color: #a7f7ff; }
+.status-archived { background-color: var(--secondary); }
