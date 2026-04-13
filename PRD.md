@@ -35,11 +35,12 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - **Typographie** : Inter ou Outfit (Google Fonts).
 
 ### 6. Fonctionnalités Développées (Suivi)
-- [ ] Initialisation du projet (CaptureFlow structure)
-- [ ] Configuration du système de design (CSS Variables, Typography)
-- [ ] Écran d'accueil (Capture + Historique)
-- [ ] Vue "Aujourd'hui"
-- [ ] Vue "Toutes les entrées" + Filtres
-- [ ] Fiche détail & Mode Édition
-- [ ] Logique de classification automatique
-- [ ] Intégration Voix (Web Speech API)
+- [x] Initialisation du projet (CaptureFlow structure)
+- [x] Configuration du système de design (CSS Variables, Typography)
+- [x] Écran d'accueil (Capture + Historique)
+- [x] Vue "Aujourd'hui"
+- [x] Vue "Toutes les entrées" + Filtres
+- [x] Fiche détail & Mode Édition
+- [x] Logique de classification automatique
+- [x] Intégration Voix (Simulation UI prête)
+

@@ -244,7 +244,7 @@ const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       style={{ 
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-        background: 'var(--bg-color)', z-index: 200, padding: '24px',
+        background: 'var(--bg-color)', zIndex: 200, padding: '24px',
         overflowY: 'auto'
       }}
     >
