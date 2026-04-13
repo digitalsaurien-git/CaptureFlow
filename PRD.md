@@ -42,5 +42,6 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - [x] Vue "Toutes les entrées" + Filtres
 - [x] Fiche détail & Mode Édition
 - [x] Logique de classification automatique
-- [x] Intégration Voix (Simulation UI prête)
+- [x] Intégration Voix (Web Speech API fonctionnelle)
+
 

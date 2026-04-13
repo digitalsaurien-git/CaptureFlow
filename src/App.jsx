@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const useSpeechRecognition = (onResult) => {
   const [isListening, setIsListening] = useState(false);
+  const [recognition, setRecognition] = useState(null);
   
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -26,27 +27,48 @@ const useSpeechRecognition = (onResult) => {
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'fr-FR';
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    const rec = new SpeechRecognition();
+    rec.lang = 'fr-FR';
+    rec.continuous = true;
+    rec.interimResults = true;
 
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = (event) => {
+    let finalTranscript = '';
+
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => {
+      setIsListening(false);
+      if (finalTranscript.trim()) {
+        onResult(finalTranscript);
+      }
+    };
+    rec.onerror = (event) => {
       console.error(event.error);
       setIsListening(false);
     };
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      onResult(transcript);
+    rec.onresult = (event) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
     };
 
-    recognition.start();
+    rec.start();
+    setRecognition(rec);
   };
 
-  return { isListening, startListening };
+  const stopListening = () => {
+    if (recognition) {
+      recognition.stop();
+    }
+  };
+
+  return { isListening, startListening, stopListening };
 };
+
 
 
 // --- Sub-components ---
@@ -72,41 +94,52 @@ const BottomNav = ({ activeTab, setActiveTab }) => (
   </nav>
 );
 
-const EntryCard = ({ entry, onClick }) => (
+const EntryCard = ({ entry, onClick, onDelete }) => (
   <motion.div 
     layout
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    onClick={onClick}
     className="glass-card" 
-    style={{ padding: '16px', marginBottom: '12px', cursor: 'pointer' }}
+    style={{ padding: '16px', marginBottom: '12px', cursor: 'pointer', position: 'relative' }}
   >
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-      <span className="tag">{entry.category}</span>
-      <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>
-        {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </span>
+    <div onClick={onClick}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+        <span className="tag">{entry.category}</span>
+        <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginRight: '24px' }}>
+          {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </div>
+      <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '4px' }}>{entry.reformulatedContent}</h3>
+      <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        {entry.rawContent}
+      </p>
+      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center' }}>
+        <span className={`status-dot status-${entry.status.replace(/\s/g, '-')}`} />
+        <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.status}</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: '11px', opacity: 0.6 }}>{entry.type}</span>
+      </div>
     </div>
-    <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '4px' }}>{entry.reformulatedContent}</h3>
-    <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-      {entry.rawContent}
-    </p>
-    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center' }}>
-      <span className={`status-dot status-${entry.status.replace(/\s/g, '-')}`} />
-      <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.status}</span>
-      <div style={{ flex: 1 }} />
-      <span style={{ fontSize: '11px', opacity: 0.6 }}>{entry.type}</span>
-    </div>
+    <button 
+      onClick={(e) => { e.stopPropagation(); if(confirm("Supprimer ?")) onDelete(entry.id); }}
+      style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--error)', opacity: 0.5 }}
+    >
+      <X size={18} />
+    </button>
   </motion.div>
 );
 
+
 // --- Main Screens ---
 
-const HomeScreen = ({ entries, onAddEntry, onEntryClick }) => {
+const HomeScreen = ({ entries, onAddEntry, onEntryClick, onDeleteEntry }) => {
   const [inputText, setInputText] = useState('');
-  const { isListening, startListening } = useSpeechRecognition((transcript) => {
-    onAddEntry(transcript);
+  const { isListening, startListening, stopListening } = useSpeechRecognition((transcript) => {
+    if (transcript.trim()) {
+      onAddEntry(transcript);
+    }
   });
+
 
 
   const handleAdd = () => {
@@ -135,19 +168,20 @@ const HomeScreen = ({ entries, onAddEntry, onEntryClick }) => {
               boxShadow: isListening ? '0 0 20px rgba(255, 75, 75, 0.4)' : '0 0 20px rgba(167, 200, 255, 0.4)',
               transition: 'all 0.3s ease'
             }}
-            onClick={startListening}
+            onClick={isListening ? stopListening : startListening}
           >
             {isListening ? (
               <motion.div
                 animate={{ scale: [1, 1.2, 1] }}
                 transition={{ repeat: Infinity, duration: 1 }}
               >
-                <Mic size={32} />
+                <Check size={32} />
               </motion.div>
             ) : (
               <Mic size={32} />
             )}
           </button>
+
 
           <div style={{ flex: 1, position: 'relative' }}>
             <input 
@@ -173,14 +207,15 @@ const HomeScreen = ({ entries, onAddEntry, onEntryClick }) => {
           <ChevronRight size={20} style={{ opacity: 0.5 }} />
         </div>
         {entries.slice(0, 5).map(entry => (
-          <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} />
+          <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
         ))}
+
       </section>
     </div>
   );
 };
 
-const TodayScreen = ({ entries, onEntryClick }) => {
+const TodayScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const todayEntries = entries.filter(e => {
     const d = new Date(e.createdAt);
@@ -202,7 +237,7 @@ const TodayScreen = ({ entries, onEntryClick }) => {
         <section style={{ marginBottom: '32px' }}>
           <h2 style={{ fontSize: '18px', marginBottom: '16px', color: 'var(--primary)' }}>Focus du jour</h2>
           {tasks.map(entry => (
-            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} />
+            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
           ))}
         </section>
       )}
@@ -211,7 +246,7 @@ const TodayScreen = ({ entries, onEntryClick }) => {
         <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Dernières captures</h2>
         {others.length > 0 ? (
           others.map(entry => (
-            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} />
+            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
           ))
         ) : (
           <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Rien pour l'instant. Capturez une idée !</p>
@@ -221,7 +256,8 @@ const TodayScreen = ({ entries, onEntryClick }) => {
   );
 };
 
-const AllEntriesScreen = ({ entries, onEntryClick }) => {
+
+const AllEntriesScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('All');
 
@@ -270,12 +306,13 @@ const AllEntriesScreen = ({ entries, onEntryClick }) => {
 
       <div>
         {filtered.map(entry => (
-          <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} />
+          <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
         ))}
       </div>
     </div>
   );
 };
+
 
 const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
   const [reformulated, setReformulated] = useState(entry.reformulatedContent);
@@ -369,12 +406,13 @@ export default function App() {
 
   const renderScreen = () => {
     switch(activeTab) {
-      case 'home': return <HomeScreen entries={entries} onAddEntry={addEntry} onEntryClick={setSelectedEntry} />;
-      case 'today': return <TodayScreen entries={entries} onEntryClick={setSelectedEntry} />;
-      case 'all': return <AllEntriesScreen entries={entries} onEntryClick={setSelectedEntry} />;
-      default: return <HomeScreen entries={entries} onAddEntry={addEntry} onEntryClick={setSelectedEntry} />;
+      case 'home': return <HomeScreen entries={entries} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      case 'today': return <TodayScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      case 'all': return <AllEntriesScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      default: return <HomeScreen entries={entries} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
     }
   };
+
 
   return (
     <div className="App">
