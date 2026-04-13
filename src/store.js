@@ -44,23 +44,32 @@ export const useStore = () => {
   };
 
   const addEntry = (rawContent) => {
-    // Basic AI simulation for V1
-    const classification = classifyContent(rawContent);
+    // Split by common connectors: period, newline, or explicit keywords
+    // This simulates AI segmentation for V1
+    const segments = rawContent
+      .split(/\. |\n| puis | ensuite | et aussi /i)
+      .map(s => s.trim())
+      .filter(s => s.length > 2);
     
-    const newEntry = {
-      id: crypto.randomUUID(),
-      rawContent,
-      reformulatedContent: classification.reformulated,
-      type: classification.type,
-      category: classification.category,
-      status: 'à traiter',
-      createdAt: new Date().toISOString(),
-      modifiedAt: new Date().toISOString()
-    };
+    if (segments.length === 0) return [];
 
-    const updated = [newEntry, ...entries];
+    const newEntries = segments.map(segment => {
+      const classification = classifyContent(segment);
+      return {
+        id: crypto.randomUUID(),
+        rawContent: segment,
+        reformulatedContent: classification.reformulated,
+        type: classification.type,
+        category: classification.category,
+        status: 'à traiter',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString()
+      };
+    });
+
+    const updated = [...newEntries, ...entries];
     saveEntries(updated);
-    return newEntry;
+    return newEntries;
   };
 
   const updateEntry = (id, updates) => {
