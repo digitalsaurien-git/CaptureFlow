@@ -22,12 +22,16 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
     - **Toutes les entrées** : Recherche et filtrage (type, catégorie, statut).
 - **Fiche Détail** : Consultation, correction de la classification et édition du contenu reformulé.
 
-### 4. Spécifications Techniques (Stack V1)
-- **Frontend** : Vite + React.
-- **Styling** : Vanilla CSS (Modern, Responsive, Mobile-first).
-- **Logique IA** : Local simulation / Regex pour la V1 (évolutif vers LLM/Integrations).
-- **Stockage** : LocalStorage (pour la V1 - "full portable").
-- **Déploiement** : GitHub Pages ou similaire.
+### 4. Spécifications Techniques (Architecture Full-Stack V1)
+- **Frontend** : Vite + React (Client)
+- **Backend** : Node.js + Express (Indépendant)
+- **Styling** : Vanilla CSS
+- **Logique IA** : Local simulation / Regex
+- **Stockage** : 
+    - **Frontend** : LocalStorage (Cache & UI)
+    - **Backend** : JSON Database (Persistance réelle, prêt pour SQLite/Supabase)
+- **Déploiement** : Frontend (Vercel/Static) + Backend (Render/Heroku/Railway)
+- **Point d'entrée** : API distante permanente (`/api/inbox`)
 
 ### 5. Design & UX
 - **Esthétique** : Design sobre, premium, rassurant (vibrant mais calme).
@@ -43,5 +47,6 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - [x] Fiche détail & Mode Édition
 - [x] Logique de classification automatique
 - [x] Intégration Voix (Web Speech API fonctionnelle)
+- [x] Webhook Ingestion (POST /api/inbox pour raccourcis iOS)
 
 

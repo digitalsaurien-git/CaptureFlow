@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from './store';
 import { 
   Plus, 
@@ -400,9 +400,29 @@ const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
 // --- Main App ---
 
 export default function App() {
-  const { entries, addEntry, updateEntry, deleteEntry } = useStore();
+  const { entries, addEntry, updateEntry, deleteEntry, syncWebhook } = useStore();
   const [activeTab, setActiveTab] = useState('home');
   const [selectedEntry, setSelectedEntry] = useState(null);
+
+  // Synchronisation automatique des messages reçus via Webhook
+  useEffect(() => {
+    // Vérification initiale
+    syncWebhook();
+
+    // Polling toutes les 20 secondes pour un usage local fluide
+    const interval = setInterval(() => {
+      syncWebhook();
+    }, 20000);
+
+    // Re-calcul lors du focus de la page (quand l'utilisateur revient sur l'onglet)
+    const handleFocus = () => syncWebhook();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [syncWebhook]);
 
   const renderScreen = () => {
     switch(activeTab) {

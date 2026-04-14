@@ -43,7 +43,7 @@ export const useStore = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newEntries));
   };
 
-  const addEntry = (rawContent) => {
+  const addEntry = (rawContent, metadata = {}) => {
     // Split by common connectors: period, newline, or explicit keywords
     // This simulates AI segmentation for V1
     const segments = rawContent
@@ -55,13 +55,20 @@ export const useStore = () => {
 
     const newEntries = segments.map(segment => {
       const classification = classifyContent(segment);
+      
+      // Override category if provided in metadata (e.g. from Shortcut)
+      const category = metadata.context 
+        ? (metadata.context.charAt(0).toUpperCase() + metadata.context.slice(1)) 
+        : classification.category;
+
       return {
         id: crypto.randomUUID(),
         rawContent: segment,
         reformulatedContent: classification.reformulated,
         type: classification.type,
-        category: classification.category,
+        category: category,
         status: 'à traiter',
+        source: metadata.source || 'app',
         createdAt: new Date().toISOString(),
         modifiedAt: new Date().toISOString()
       };
@@ -70,6 +77,32 @@ export const useStore = () => {
     const updated = [...newEntries, ...entries];
     saveEntries(updated);
     return newEntries;
+  };
+
+  const syncWebhook = async () => {
+    // URL du backend (à modifier par l'URL de prod une fois déployé)
+    const API_URL = 'http://localhost:3001/api/inbox';
+
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) return;
+      
+      const newItems = await response.json();
+      if (newItems.length > 0) {
+        console.log(`[Webhook] Synchronisation de ${newItems.length} nouveaux messages depis le serveur`);
+        newItems.forEach(item => {
+          addEntry(item.text, { 
+            context: item.context, 
+            source: item.source 
+          });
+        });
+        return true;
+      }
+    } catch (error) {
+      // On ne loggue l'erreur que si on n'est pas en mode "silencieux" pour éviter de polluer la console
+      console.warn('[Backend Offline] Impossible de contacter le serveur d\'ingestion');
+    }
+    return false;
   };
 
   const updateEntry = (id, updates) => {
@@ -84,7 +117,7 @@ export const useStore = () => {
     saveEntries(updated);
   };
 
-  return { entries, addEntry, updateEntry, deleteEntry };
+  return { entries, addEntry, updateEntry, deleteEntry, syncWebhook };
 };
 
 // V1 Classification Logic (Regex & Keywords)
