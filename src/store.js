@@ -75,6 +75,8 @@ export const useStore = () => {
         category: category,
         context: metadata.context === 'work' ? 'work' : 'perso',
         status: 'todo',
+        dueDate: classification.dueDate || null,
+        dueTime: classification.dueTime || null,
         source: metadata.source || 'app',
         createdAt: new Date().toISOString(),
         modifiedAt: new Date().toISOString()
@@ -159,12 +161,15 @@ const classifyContent = (text) => {
   // Detection simple des tâches (mots d'action)
   const taskKeywords = [
     'faire', 'acheter', 'appeler', 'finir', 'réparer', 'penser à', 
-    'rappeler', 'envoyer', 'donner', 'prendre', 'voir', 'task'
+    'rappeler', 'envoyer', 'donner', 'prendre', 'voir', 'task', 'rendez-vous'
   ];
   
   if (taskKeywords.some(kw => lowText.includes(kw))) {
     type = 'task';
   }
+
+  // Extraction Date & Heure
+  const { dueDate, dueTime, cleanText } = detectDateTime(text);
 
   // Autres types (restent dans l'Inbox si pas classés manuellement, mais detectés pour info)
   if (lowText.includes('suivi') || lowText.includes('santé') || lowText.includes('migraine')) type = 'tracking';
@@ -178,8 +183,48 @@ const classifyContent = (text) => {
   if (lowText.includes('bois') || lowText.includes('bushcraft') || lowText.includes('couteau')) category = 'Bushcraft';
 
   // Basic reformulation simulation
-  let reformulated = text.charAt(0).toUpperCase() + text.slice(1);
-  if (type === 'task' && !lowText.startsWith('faire')) reformulated = `À faire : ${reformulated}`;
+  let reformulated = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
+  if (type === 'task' && !lowText.startsWith('faire') && !lowText.startsWith('à faire')) {
+     reformulated = `À faire : ${reformulated}`;
+  }
 
-  return { type, category, reformulated };
+  return { type, category, reformulated, dueDate, dueTime };
+};
+
+const detectDateTime = (text) => {
+  let lowText = text.toLowerCase();
+  let dueDate = null;
+  let dueTime = null;
+  let cleanText = text;
+
+  // 1. Détection de l'heure (ex: 8h, 14h30)
+  const timeMatch = lowText.match(/(\d{1,2}h\d{0,2})/);
+  if (timeMatch) {
+    dueTime = timeMatch[1];
+    cleanText = cleanText.replace(new RegExp(timeMatch[1], 'i'), '').trim();
+  }
+
+  // 2. Détection de la date / jour
+  const dayKeywords = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche', 'demain', "aujourd'hui"];
+  for (const day of dayKeywords) {
+    if (lowText.includes(day)) {
+      dueDate = day;
+      cleanText = cleanText.replace(new RegExp(day, 'i'), '').trim();
+      break; 
+    }
+  }
+
+  // 3. Détection format date simple (21/04 ou le 21)
+  const dateMatch = lowText.match(/(\d{1,2}\/\d{1,2})/) || lowText.match(/(?:le\s)(\d{1,2})/);
+  if (dateMatch && !dueDate) {
+    dueDate = dateMatch[1];
+    cleanText = cleanText.replace(new RegExp(dateMatch[0], 'i'), '').trim();
+  }
+
+  // Nettoyage final des connecteurs orphelins (à, le, pour)
+  cleanText = cleanText.replace(/\s(à|le|pour|au|ce|cette)\s?$/i, '').trim();
+  // Double espaces
+  cleanText = cleanText.replace(/\s\s+/g, ' ');
+
+  return { dueDate, dueTime, cleanText };
 };

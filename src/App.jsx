@@ -15,6 +15,7 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  Clock,
   Inbox,
   Layout,
   Repeat,
@@ -143,9 +144,19 @@ const EntryCard = ({ entry, onClick, onDelete }) => (
       <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {entry.rawContent}
       </p>
-      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center' }}>
-        <span className={`status-dot status-${entry.status.replace(/\s/g, '-')}`} />
-        <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.status}</span>
+      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <span className={`status-dot status-${entry.status.replace(/\s/g, '-')}`} />
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.8 }}>{entry.status}</span>
+        </div>
+        
+        {(entry.dueDate || entry.dueTime) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', fontSize: '12px', fontWeight: '600' }}>
+            <Clock size={14} />
+            <span>{entry.dueDate} {entry.dueTime}</span>
+          </div>
+        )}
+
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: '11px', opacity: 0.6 }}>{entry.type}</span>
       </div>
