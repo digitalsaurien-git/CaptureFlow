@@ -106,6 +106,40 @@ const BottomNav = ({ activeTab, setActiveTab }) => (
   </nav>
 );
 
+const Sidebar = ({ activeTab, setActiveTab }) => (
+  <aside className="sidebar">
+    <div className="sidebar-header">
+      <div className="sidebar-logo">CaptureFlow</div>
+    </div>
+    <nav className="sidebar-menu">
+      <button onClick={() => setActiveTab('dashboard')} className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}>
+        <Layout size={20} />
+        <span>Tableau de bord</span>
+      </button>
+      <button onClick={() => setActiveTab('inbox')} className={`sidebar-item ${activeTab === 'inbox' ? 'active' : ''}`}>
+        <Inbox size={20} />
+        <span>Boîte d'entrée</span>
+      </button>
+      <button onClick={() => setActiveTab('tasks')} className={`sidebar-item ${activeTab === 'tasks' ? 'active' : ''}`}>
+        <CheckCircle size={20} />
+        <span>Mes Tâches</span>
+      </button>
+      <button onClick={() => setActiveTab('routines')} className={`sidebar-item ${activeTab === 'routines' ? 'active' : ''}`}>
+        <Repeat size={20} />
+        <span>Routines</span>
+      </button>
+      <button onClick={() => setActiveTab('tracking')} className={`sidebar-item ${activeTab === 'tracking' ? 'active' : ''}`}>
+        <Heart size={20} />
+        <span>Suivi</span>
+      </button>
+      <button onClick={() => setActiveTab('library')} className={`sidebar-item ${activeTab === 'library' ? 'active' : ''}`}>
+        <BookOpen size={20} />
+        <span>Bibliothèque</span>
+      </button>
+    </nav>
+  </aside>
+);
+
 const ContextToggle = ({ activeContext, setActiveContext }) => (
   <div className="context-toggle">
     <button 
@@ -334,8 +368,8 @@ const TasksScreen = ({ entries, activeContext, setActiveContext, onEntryClick, o
   );
 };
 
-const MoreScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
-  const [activeSubTab, setActiveSubTab] = useState('routines'); // routines | tracking | reference
+const MoreScreen = ({ entries, onEntryClick, onDeleteEntry, explicitType }) => {
+  const [activeSubTab, setActiveSubTab] = useState(explicitType || 'routines'); // routines | tracking | reference
 
   const filtered = entries.filter(e => {
     if (activeSubTab === 'routines') return e.type === 'routine';
@@ -356,11 +390,14 @@ const MoreScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
         <h1>{getTitle()}</h1>
       </header>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px' }}>
-        <button onClick={() => setActiveSubTab('routines')} className={`tag ${activeSubTab === 'routines' ? 'active-tag' : ''}`}>Routines</button>
-        <button onClick={() => setActiveSubTab('tracking')} className={`tag ${activeSubTab === 'tracking' ? 'active-tag' : ''}`}>Suivi</button>
-        <button onClick={() => setActiveSubTab('reference')} className={`tag ${activeSubTab === 'reference' ? 'active-tag' : ''}`}>Bibliothèque</button>
-      </div>
+      {/* Only show subtabs on mobile/More view */}
+      {!explicitType && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px' }}>
+          <button onClick={() => setActiveSubTab('routines')} className={`tag ${activeSubTab === 'routines' ? 'active-tag' : ''}`}>Routines</button>
+          <button onClick={() => setActiveSubTab('tracking')} className={`tag ${activeSubTab === 'tracking' ? 'active-tag' : ''}`}>Suivi</button>
+          <button onClick={() => setActiveSubTab('reference')} className={`tag ${activeSubTab === 'reference' ? 'active-tag' : ''}`}>Bibliothèque</button>
+        </div>
+      )}
 
       <section>
         {filtered.length > 0 ? (
@@ -541,6 +578,12 @@ export default function App() {
         return <InboxScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onUpdateEntry={updateEntry} />;
       case 'tasks': 
         return <TasksScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      case 'routines':
+        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="routines" />;
+      case 'tracking':
+        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="tracking" />;
+      case 'library':
+        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="reference" />;
       case 'more': 
         return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
       default: 
@@ -548,10 +591,13 @@ export default function App() {
     }
   };
 
-
   return (
-    <div className="App">
-      {renderScreen()}
+    <div className="App app-layout">
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      
+      <main className="main-content">
+        {renderScreen()}
+      </main>
       
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
