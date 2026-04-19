@@ -13,6 +13,19 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Clé API simple pour V1 (À configurer via variable d'environnement en prod)
+const API_KEY = process.env.API_KEY || 'capture-flow-secret-key';
+
+// Middleware de sécurité
+const authMiddleware = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey && apiKey === API_KEY) {
+    next();
+  } else {
+    res.status(401).json({ success: false, error: 'Accès non autorisé (Clé API manquante ou invalide)' });
+  }
+};
+
 // Initialisation de la "base de données" (fichier JSON)
 async function initDB() {
   try {
@@ -22,8 +35,8 @@ async function initDB() {
   }
 }
 
-// Endpoint Webhook - POST /api/inbox
-app.post('/api/inbox', async (req, res) => {
+// Endpoint Webhook - POST /api/inbox (Protéger par clé API)
+app.post('/api/inbox', authMiddleware, async (req, res) => {
   const { text, context, source } = req.body;
 
   if (!text) {
@@ -56,8 +69,8 @@ app.post('/api/inbox', async (req, res) => {
   }
 });
 
-// Endpoint Fetch - GET /api/inbox
-app.get('/api/inbox', async (req, res) => {
+// Endpoint Fetch - GET /api/inbox (Protéger par clé API pour la synchro frontend)
+app.get('/api/inbox', authMiddleware, async (req, res) => {
   try {
     const data = JSON.parse(await fs.readFile(DB_PATH, 'utf-8'));
     const currentInbox = [...data.inbox];

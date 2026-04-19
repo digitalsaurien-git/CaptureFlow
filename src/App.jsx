@@ -10,7 +10,18 @@ import {
   ChevronRight, 
   Search,
   X,
-  Check
+  Check,
+  CheckCircle,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  Inbox,
+  Layout,
+  Repeat,
+  Heart,
+  BookOpen,
+  Briefcase,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -75,23 +86,42 @@ const useSpeechRecognition = (onResult) => {
 
 const BottomNav = ({ activeTab, setActiveTab }) => (
   <nav className="bottom-nav">
-    <button onClick={() => setActiveTab('home')} className={`nav-item ${activeTab === 'home' ? 'active' : ''}`}>
-      <Home size={24} />
-      <span>Accueil</span>
+    <button onClick={() => setActiveTab('dashboard')} className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}>
+      <Layout size={24} />
+      <span>Focus</span>
     </button>
-    <button onClick={() => setActiveTab('today')} className={`nav-item ${activeTab === 'today' ? 'active' : ''}`}>
-      <Calendar size={24} />
-      <span>Aujourd'hui</span>
+    <button onClick={() => setActiveTab('inbox')} className={`nav-item ${activeTab === 'inbox' ? 'active' : ''}`}>
+      <Inbox size={24} />
+      <span>Inbox</span>
     </button>
-    <button onClick={() => setActiveTab('all')} className={`nav-item ${activeTab === 'all' ? 'active' : ''}`}>
+    <button onClick={() => setActiveTab('tasks')} className={`nav-item ${activeTab === 'tasks' ? 'active' : ''}`}>
+      <CheckCircle size={24} />
+      <span>Tâches</span>
+    </button>
+    <button onClick={() => setActiveTab('more')} className={`nav-item ${activeTab === 'more' ? 'active' : ''}`}>
       <List size={24} />
-      <span>Toutes</span>
-    </button>
-    <button onClick={() => setActiveTab('settings')} className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}>
-      <Settings size={24} />
-      <span>Paramètres</span>
+      <span>Plus</span>
     </button>
   </nav>
+);
+
+const ContextToggle = ({ activeContext, setActiveContext }) => (
+  <div className="context-toggle">
+    <button 
+      className={activeContext === 'perso' ? 'active' : ''} 
+      onClick={() => setActiveContext('perso')}
+    >
+      <User size={16} />
+      <span>Perso</span>
+    </button>
+    <button 
+      className={activeContext === 'work' ? 'active' : ''} 
+      onClick={() => setActiveContext('work')}
+    >
+      <Briefcase size={16} />
+      <span>Travail</span>
+    </button>
+  </div>
 );
 
 const EntryCard = ({ entry, onClick, onDelete }) => (
@@ -132,124 +162,202 @@ const EntryCard = ({ entry, onClick, onDelete }) => (
 
 // --- Main Screens ---
 
-const HomeScreen = ({ entries, onAddEntry, onEntryClick, onDeleteEntry }) => {
+const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry, onEntryClick, onDeleteEntry }) => {
   const [inputText, setInputText] = useState('');
   const { isListening, startListening, stopListening } = useSpeechRecognition((transcript) => {
     if (transcript.trim()) {
-      onAddEntry(transcript);
+      onAddEntry(transcript, { context: activeContext });
     }
   });
 
-
-
   const handleAdd = () => {
     if (inputText.trim()) {
-      onAddEntry(inputText);
+      onAddEntry(inputText, { context: activeContext });
       setInputText('');
     }
   };
 
+  const priorityTasks = entries.filter(e => 
+    e.type === 'task' && 
+    e.context === activeContext && 
+    e.status === 'todo'
+  ).slice(0, 3);
+
+  const inboxCount = entries.filter(e => e.type === 'inbox').length;
+
   return (
     <div className="app-container">
       <header className="screen-header">
-        <h1>CaptureFlow</h1>
-        <p>Libérez votre esprit instantanément</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <h1>CaptureFlow</h1>
+          <SyncStatus />
+        </div>
+        <div style={{ marginTop: '20px' }}>
+          <ContextToggle activeContext={activeContext} setActiveContext={setActiveContext} />
+        </div>
       </header>
 
-      <section className="glass-card" style={{ padding: '24px', marginBottom: '32px', textAlign: 'center' }}>
-        <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: '500' }}>Que voulez-vous capturer ?</h2>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+      <section className="glass-card capture-card" style={{ padding: '24px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button 
-            style={{ 
-              width: '64px', height: '64px', borderRadius: '50%', 
-              background: isListening ? '#ff4b4b' : 'var(--primary)', 
-              color: isListening ? 'white' : 'var(--on-primary)', 
-              display: 'flex', alignItems: 'center', justifyContent: 'center', 
-              boxShadow: isListening ? '0 0 20px rgba(255, 75, 75, 0.4)' : '0 0 20px rgba(167, 200, 255, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className={`mic-button ${isListening ? 'listening' : ''}`}
             onClick={isListening ? stopListening : startListening}
           >
-            {isListening ? (
-              <motion.div
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ repeat: Infinity, duration: 1 }}
-              >
-                <Check size={32} />
-              </motion.div>
-            ) : (
-              <Mic size={32} />
-            )}
+            {isListening ? <Check size={28} /> : <Mic size={28} />}
           </button>
-
-
           <div style={{ flex: 1, position: 'relative' }}>
             <input 
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="Écrivez quelque chose..." 
-              style={{ width: '100%', height: '64px', paddingLeft: '20px', paddingRight: '60px', borderRadius: '32px' }}
+              placeholder="Notez quelque chose..." 
+              style={{ width: '100%', height: '56px', borderRadius: '28px' }}
             />
-            <button 
-              onClick={handleAdd}
-              style={{ position: 'absolute', right: '12px', top: '12px', width: '40px', height: '40px', borderRadius: '50%', background: 'var(--primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Plus size={24} />
+            <button className="add-button" onClick={handleAdd}>
+              <Plus size={20} />
             </button>
           </div>
         </div>
       </section>
 
+      {inboxCount > 0 && (
+        <div 
+          className="inbox-alert" 
+          style={{ 
+            marginBottom: '20px', padding: '12px 20px', borderRadius: '16px', 
+            background: 'var(--primary-container)', color: 'var(--on-primary-container)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontSize: '14px', fontWeight: '500'
+          }}
+        >
+          <span>{inboxCount} élément{inboxCount > 1 ? 's' : ''} à traiter dans mon Inbox</span>
+          <ChevronRight size={18} />
+        </div>
+      )}
+
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '20px' }}>Récents</h2>
-          <ChevronRight size={20} style={{ opacity: 0.5 }} />
+          <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Tâches prioritaires</h2>
         </div>
-        {entries.slice(0, 5).map(entry => (
-          <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
-        ))}
+        {priorityTasks.length > 0 ? (
+          priorityTasks.map(entry => (
+            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
+          ))
+        ) : (
+          <p style={{ opacity: 0.5, fontSize: '14px', textAlign: 'center', padding: '20px' }}>Aucune tâche en cours.</p>
+        )}
+      </section>
 
+      <section style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <button className="space-link" style={{ padding: '20px', background: 'var(--surface-high)', borderRadius: '16px', textAlign: 'left' }}>
+          <Repeat size={20} style={{ marginBottom: '8px', color: 'var(--secondary)' }} />
+          <div style={{ fontWeight: '600', fontSize: '14px' }}>Routines</div>
+        </button>
+        <button className="space-link" style={{ padding: '20px', background: 'var(--surface-high)', borderRadius: '16px', textAlign: 'left' }}>
+          <Heart size={20} style={{ marginBottom: '8px', color: 'var(--error)' }} />
+          <div style={{ fontWeight: '600', fontSize: '14px' }}>Suivi</div>
+        </button>
+        <button className="space-link" style={{ padding: '20px', background: 'var(--surface-high)', borderRadius: '16px', textAlign: 'left', gridColumn: 'span 2' }}>
+          <BookOpen size={20} style={{ marginBottom: '8px', color: 'var(--primary)' }} />
+          <div style={{ fontWeight: '600', fontSize: '14px' }}>Bibliothèque</div>
+        </button>
       </section>
     </div>
   );
 };
 
-const TodayScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
-  const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const todayEntries = entries.filter(e => {
-    const d = new Date(e.createdAt);
-    const now = new Date();
-    return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
-
-  const tasks = todayEntries.filter(e => e.type === 'tâche');
-  const others = todayEntries.filter(e => e.type !== 'tâche');
+const InboxScreen = ({ entries, onEntryClick, onDeleteEntry, onUpdateEntry }) => {
+  const inboxItems = entries.filter(e => e.type === 'inbox');
 
   return (
     <div className="app-container">
       <header className="screen-header">
-        <p style={{ textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '12px' }}>Aujourd'hui</p>
-        <h1 style={{ textTransform: 'capitalize' }}>{today}</h1>
+        <h1>Boîte d'entrée</h1>
+        <p>{inboxItems.length} élément{inboxItems.length > 1 ? 's' : ''} en attente</p>
       </header>
 
-      {tasks.length > 0 && (
-        <section style={{ marginBottom: '32px' }}>
-          <h2 style={{ fontSize: '18px', marginBottom: '16px', color: 'var(--primary)' }}>Focus du jour</h2>
-          {tasks.map(entry => (
-            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
-          ))}
-        </section>
+      {inboxItems.length > 0 ? (
+        inboxItems.map(entry => (
+          <div key={entry.id} style={{ position: 'relative', marginBottom: '16px' }}>
+            <EntryCard entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
+            <div style={{ display: 'flex', gap: '8px', marginTop: '-4px', paddingBottom: '12px', paddingLeft: '8px' }}>
+               <button onClick={() => onUpdateEntry(entry.id, { type: 'task' })} className="tag" style={{ background: 'var(--primary-container)' }}>Tâche</button>
+               <button onClick={() => onUpdateEntry(entry.id, { type: 'routine' })} className="tag">Routine</button>
+               <button onClick={() => onUpdateEntry(entry.id, { type: 'tracking' })} className="tag">Suivi</button>
+               <button onClick={() => onUpdateEntry(entry.id, { type: 'reference' })} className="tag">Référence</button>
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={{ textAlign: 'center', padding: '60px 20px', opacity: 0.5 }}>
+          <Inbox size={48} style={{ marginBottom: '16px' }} />
+          <p>Votre boîte d'entrée est vide.</p>
+        </div>
       )}
+    </div>
+  );
+};
+
+const TasksScreen = ({ entries, activeContext, setActiveContext, onEntryClick, onDeleteEntry }) => {
+  const tasks = entries.filter(e => e.type === 'task' && e.context === activeContext);
+
+  return (
+    <div className="app-container">
+      <header className="screen-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <h1>Mes Tâches</h1>
+          <ContextToggle activeContext={activeContext} setActiveContext={setActiveContext} />
+        </div>
+      </header>
 
       <section>
-        <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Dernières captures</h2>
-        {others.length > 0 ? (
-          others.map(entry => (
+        {tasks.length > 0 ? (
+          tasks.map(entry => (
             <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
           ))
         ) : (
-          <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Rien pour l'instant. Capturez une idée !</p>
+          <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Aucune tâche dans cet espace.</p>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const MoreScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
+  const [activeSubTab, setActiveSubTab] = useState('routines'); // routines | tracking | reference
+
+  const filtered = entries.filter(e => {
+    if (activeSubTab === 'routines') return e.type === 'routine';
+    if (activeSubTab === 'tracking') return e.type === 'tracking';
+    if (activeSubTab === 'reference') return e.type === 'reference';
+    return false;
+  });
+
+  const getTitle = () => {
+    if (activeSubTab === 'routines') return 'Routines';
+    if (activeSubTab === 'tracking') return 'Suivi';
+    if (activeSubTab === 'reference') return 'Bibliothèque';
+  };
+
+  return (
+    <div className="app-container">
+      <header className="screen-header">
+        <h1>{getTitle()}</h1>
+      </header>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px' }}>
+        <button onClick={() => setActiveSubTab('routines')} className={`tag ${activeSubTab === 'routines' ? 'active-tag' : ''}`}>Routines</button>
+        <button onClick={() => setActiveSubTab('tracking')} className={`tag ${activeSubTab === 'tracking' ? 'active-tag' : ''}`}>Suivi</button>
+        <button onClick={() => setActiveSubTab('reference')} className={`tag ${activeSubTab === 'reference' ? 'active-tag' : ''}`}>Bibliothèque</button>
+      </div>
+
+      <section>
+        {filtered.length > 0 ? (
+          filtered.map(entry => (
+            <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
+          ))
+        ) : (
+          <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Espace vide.</p>
         )}
       </section>
     </div>
@@ -257,77 +365,20 @@ const TodayScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
 };
 
 
-const AllEntriesScreen = ({ entries, onEntryClick, onDeleteEntry }) => {
-  const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('All');
-
-  const filtered = entries.filter(e => {
-    const matchSearch = e.rawContent.toLowerCase().includes(search.toLowerCase()) || 
-                       e.reformulatedContent.toLowerCase().includes(search.toLowerCase());
-    const matchType = filterType === 'All' || e.type === filterType;
-    return matchSearch && matchType;
-  });
-
-  const types = ['All', 'tâche', 'note', 'idée', 'suivi', 'référence'];
-
-  return (
-    <div className="app-container">
-      <header className="screen-header">
-        <h1>Toutes les entrées</h1>
-      </header>
-
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ position: 'relative', marginBottom: '16px' }}>
-          <Search size={20} style={{ position: 'absolute', left: '16px', top: '14px', opacity: 0.5 }} />
-          <input 
-            placeholder="Rechercher..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ width: '100%', paddingLeft: '48px', height: '48px' }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-          {types.map(t => (
-            <button 
-              key={t}
-              onClick={() => setFilterType(t)}
-              className="tag"
-              style={{ 
-                background: filterType === t ? 'var(--primary)' : 'var(--surface-high)',
-                color: filterType === t ? 'var(--on-primary)' : 'var(--primary)',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        {filtered.map(entry => (
-          <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-
 const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
   const [reformulated, setReformulated] = useState(entry.reformulatedContent);
+  const [notes, setNotes] = useState(entry.notes || '');
   const [type, setType] = useState(entry.type);
-  const [category, setCategory] = useState(entry.category);
+  const [context, setContext] = useState(entry.context || 'perso');
   const [status, setStatus] = useState(entry.status);
 
   const handleSave = () => {
-    onUpdate(entry.id, { reformulatedContent: reformulated, type, category, status });
+    onUpdate(entry.id, { reformulatedContent: reformulated, notes, type, context, status });
     onClose();
   };
 
-  const types = ['tâche', 'note', 'idée', 'suivi', 'référence'];
-  const categories = ['Travail', 'Perso', 'Courses', 'Santé', 'Bushcraft', 'Idées'];
-  const statuses = ['à traiter', 'en cours', 'terminé', 'archivé'];
+  const types = ['inbox', 'task', 'routine', 'tracking', 'reference'];
+  const statuses = ['todo', 'done', 'archived'];
 
   return (
     <motion.div 
@@ -363,6 +414,16 @@ const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
         </div>
       </section>
 
+      <section style={{ marginBottom: '32px' }}>
+        <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', opacity: 0.5, marginBottom: '8px' }}>Notes & Détails</label>
+        <textarea 
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Ajouter des notes pour reprendre plus tard..."
+          style={{ width: '100%', minHeight: '100px', fontSize: '16px', lineHeight: '1.4', background: 'var(--surface-high)' }}
+        />
+      </section>
+
       <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '32px' }}>
         <div>
           <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', opacity: 0.5, marginBottom: '8px' }}>Type</label>
@@ -371,9 +432,10 @@ const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', opacity: 0.5, marginBottom: '8px' }}>Catégorie</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: '100%' }}>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', opacity: 0.5, marginBottom: '8px' }}>Contexte</label>
+          <select value={context} onChange={(e) => setContext(e.target.value)} style={{ width: '100%' }}>
+             <option value="perso">Perso</option>
+             <option value="work">Travail</option>
           </select>
         </div>
         <div style={{ gridColumn: 'span 2' }}>
@@ -397,24 +459,60 @@ const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
   );
 };
 
+const SyncStatus = () => {
+  const { isSyncing, lastSyncError } = useStore();
+  
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className={`sync-indicator ${lastSyncError ? 'offline' : (isSyncing ? 'syncing' : 'online')}`}
+      style={{ 
+        display: 'flex', alignItems: 'center', gap: '6px', 
+        fontSize: '11px', fontWeight: '600', textTransform: 'uppercase',
+        padding: '6px 12px', borderRadius: '100px',
+        background: 'var(--surface-high)',
+        color: lastSyncError ? 'var(--error)' : 'var(--on-surface-variant)'
+      }}
+    >
+      {isSyncing ? (
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+        >
+          <RefreshCw size={14} />
+        </motion.div>
+      ) : lastSyncError ? (
+        <CloudOff size={14} />
+      ) : (
+        <Cloud size={14} style={{ color: 'var(--primary)' }} />
+      )}
+      <span>{isSyncing ? 'Synchronisation' : (lastSyncError ? 'Hors-ligne' : 'Cloud Prêt')}</span>
+    </motion.div>
+  );
+};
+
 // --- Main App ---
 
 export default function App() {
-  const { entries, addEntry, updateEntry, deleteEntry, syncWebhook } = useStore();
-  const [activeTab, setActiveTab] = useState('home');
+  const { 
+    entries, 
+    activeContext, 
+    setActiveContext, 
+    addEntry, 
+    updateEntry, 
+    deleteEntry, 
+    syncWebhook 
+  } = useStore();
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedEntry, setSelectedEntry] = useState(null);
 
-  // Synchronisation automatique des messages reçus via Webhook
   useEffect(() => {
-    // Vérification initiale
     syncWebhook();
-
-    // Polling toutes les 20 secondes pour un usage local fluide
     const interval = setInterval(() => {
       syncWebhook();
     }, 20000);
 
-    // Re-calcul lors du focus de la page (quand l'utilisateur revient sur l'onglet)
     const handleFocus = () => syncWebhook();
     window.addEventListener('focus', handleFocus);
 
@@ -426,10 +524,16 @@ export default function App() {
 
   const renderScreen = () => {
     switch(activeTab) {
-      case 'home': return <HomeScreen entries={entries} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
-      case 'today': return <TodayScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
-      case 'all': return <AllEntriesScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
-      default: return <HomeScreen entries={entries} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      case 'dashboard': 
+        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      case 'inbox': 
+        return <InboxScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onUpdateEntry={updateEntry} />;
+      case 'tasks': 
+        return <TasksScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      case 'more': 
+        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+      default: 
+        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
     }
   };
 

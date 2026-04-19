@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'captureflow_entries';
+const API_KEY = 'capture-flow-secret-key'; // Doit matcher le backend
 
 export const useStore = () => {
   const [entries, setEntries] = useState([]);
+  const [activeContext, setActiveContext] = useState('perso'); // 'perso' | 'work'
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncError, setLastSyncError] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -16,9 +20,10 @@ export const useStore = () => {
           id: '1',
           rawContent: 'Acheter des sardines pour le bivouac bushcraft',
           reformulatedContent: 'À faire : Acheter des sardines pour le bivouac bushcraft',
-          type: 'tâche',
+          type: 'task',
           category: 'Bushcraft',
-          status: 'à traiter',
+          context: 'perso',
+          status: 'todo',
           createdAt: new Date().toISOString(),
           modifiedAt: new Date().toISOString()
         },
@@ -26,9 +31,10 @@ export const useStore = () => {
           id: '2',
           rawContent: 'Idée de génie pour le projet CaptureFlow',
           reformulatedContent: 'Idée de génie pour le projet CaptureFlow',
-          type: 'idée',
+          type: 'task',
           category: 'Idées',
-          status: 'en cours',
+          context: 'work',
+          status: 'todo',
           createdAt: new Date().toISOString(),
           modifiedAt: new Date().toISOString()
         }
@@ -65,9 +71,10 @@ export const useStore = () => {
         id: crypto.randomUUID(),
         rawContent: segment,
         reformulatedContent: classification.reformulated,
-        type: classification.type,
+        type: 'inbox', // All new entries land in the inbox first
         category: category,
-        status: 'à traiter',
+        context: metadata.context === 'work' ? 'work' : 'perso',
+        status: 'todo',
         source: metadata.source || 'app',
         createdAt: new Date().toISOString(),
         modifiedAt: new Date().toISOString()
@@ -80,27 +87,40 @@ export const useStore = () => {
   };
 
   const syncWebhook = async () => {
-    // URL du backend (à modifier par l'URL de prod une fois déployé)
     const API_URL = 'http://localhost:3001/api/inbox';
+    
+    setIsSyncing(true);
+    setLastSyncError(null);
 
     try {
-      const response = await fetch(API_URL);
-      if (!response.ok) return;
+      const response = await fetch(API_URL, {
+        headers: {
+          'X-API-Key': API_KEY
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Erreur serveur: ${response.status}`);
+      }
       
       const newItems = await response.json();
       if (newItems.length > 0) {
-        console.log(`[Webhook] Synchronisation de ${newItems.length} nouveaux messages depis le serveur`);
+        console.log(`[Webhook] Synchronisation de ${newItems.length} messages`);
         newItems.forEach(item => {
           addEntry(item.text, { 
             context: item.context, 
             source: item.source 
           });
         });
+        setIsSyncing(false);
         return true;
       }
     } catch (error) {
-      // On ne loggue l'erreur que si on n'est pas en mode "silencieux" pour éviter de polluer la console
-      console.warn('[Backend Offline] Impossible de contacter le serveur d\'ingestion');
+      console.warn('[Backend Offline]', error.message);
+      setLastSyncError(error.message);
+    } finally {
+      // On laisse souffler un peu l'indicateur
+      setTimeout(() => setIsSyncing(false), 800);
     }
     return false;
   };
@@ -117,29 +137,39 @@ export const useStore = () => {
     saveEntries(updated);
   };
 
-  return { entries, addEntry, updateEntry, deleteEntry, syncWebhook };
+  return { 
+    entries, 
+    activeContext, 
+    setActiveContext, 
+    addEntry, 
+    updateEntry, 
+    deleteEntry, 
+    syncWebhook, 
+    isSyncing, 
+    lastSyncError 
+  };
 };
 
 // V1 Classification Logic (Regex & Keywords)
 const classifyContent = (text) => {
   const lowText = text.toLowerCase();
   
-  let type = 'note';
-  if (lowText.includes('faire') || lowText.includes('acheter') || lowText.includes('task')) type = 'tâche';
-  if (lowText.includes('idée') || lowText.includes('penser à')) type = 'idée';
-  if (lowText.includes('rappeler') || lowText.includes('suivi')) type = 'suivi';
-  if (lowText.includes('lien') || lowText.includes('voir')) type = 'référence';
+  let type = 'inbox';
+  if (lowText.includes('faire') || lowText.includes('acheter') || lowText.includes('task')) type = 'task';
+  if (lowText.includes('idée') || lowText.includes('penser à')) type = 'task';
+  if (lowText.includes('rappeler') || lowText.includes('suivi') || lowText.includes('santé') || lowText.includes('migraine')) type = 'tracking';
+  if (lowText.includes('lien') || lowText.includes('voir') || lowText.includes('livre') || lowText.includes('notice')) type = 'reference';
+  if (lowText.includes('habitude') || lowText.includes('routine') || lowText.includes('exercice')) type = 'routine';
 
-  let category = 'Perso';
+  let category = 'Général';
   if (lowText.includes('boulot') || lowText.includes('travail') || lowText.includes('réunion')) category = 'Travail';
   if (lowText.includes('course') || lowText.includes('manger') || lowText.includes('magasin')) category = 'Courses';
   if (lowText.includes('santé') || lowText.includes('sport') || lowText.includes('docteur')) category = 'Santé';
   if (lowText.includes('bois') || lowText.includes('bushcraft') || lowText.includes('couteau')) category = 'Bushcraft';
-  if (type === 'idée') category = 'Idées';
 
   // Basic reformulation simulation
   let reformulated = text.charAt(0).toUpperCase() + text.slice(1);
-  if (type === 'tâche' && !lowText.startsWith('faire')) reformulated = `À faire : ${reformulated}`;
+  if (type === 'task' && !lowText.startsWith('faire')) reformulated = `À faire : ${reformulated}`;
 
   return { type, category, reformulated };
 };

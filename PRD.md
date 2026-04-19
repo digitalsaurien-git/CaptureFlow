@@ -48,5 +48,18 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - [x] Logique de classification automatique
 - [x] Intégration Voix (Web Speech API fonctionnelle)
 - [x] Webhook Ingestion (POST /api/inbox pour raccourcis iOS)
+- [x] Sécurisation par API Key (Frontend & Backend)
+- [x] Indicateur visuel de synchronisation Cloud
+- [ ] **(Phase 2)** Architecture par Espaces (Dashboard, Inbox, Tâches, Routines, Suivi, Bibliothèque)
+- [ ] **(Phase 2)** Bascule Contextuelle (Perso / Travail)
+- [ ] **(Phase 2)** Système de fiches enrichies (Notes + Résumés)
+
+### 7. Structure Cible (Phase 2)
+- **Dashboard** : Tâches prioritaires + Capture rapide + Bascule contexte.
+- **Inbox** : Point d'entrée unique pour triage.
+- **Tâches** : Séparation stricte Perso/Travail.
+- **Routines** : Suivi d'habitudes.
+- **Suivi** : Journal de données (Santé, migraines, etc.).
+- **Bibliothèque** : Références et contenus externes.
 
 
