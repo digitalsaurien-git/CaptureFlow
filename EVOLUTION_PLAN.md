@@ -57,3 +57,4 @@ Chaque entrée disposera des champs suivants :
 1. **La barre de navigation** : Permet de circuler entre les futurs espaces même s'ils sont vides au départ.
 2. **Le sélecteur Perso/Travail** au niveau global (Dashboard).
 3. **Le type 'inbox' par défaut** pour toutes les nouvelles entrées.
+4. **Classification automatique des tâches** : Les entrées contenant des verbes d'action (acheter, appeler, finir, etc.) sont directement routées vers l'espace Tâches.

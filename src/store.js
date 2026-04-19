@@ -71,7 +71,7 @@ export const useStore = () => {
         id: crypto.randomUUID(),
         rawContent: segment,
         reformulatedContent: classification.reformulated,
-        type: 'inbox', // All new entries land in the inbox first
+        type: classification.type === 'task' ? 'task' : 'inbox', 
         category: category,
         context: metadata.context === 'work' ? 'work' : 'perso',
         status: 'todo',
@@ -155,9 +155,19 @@ const classifyContent = (text) => {
   const lowText = text.toLowerCase();
   
   let type = 'inbox';
-  if (lowText.includes('faire') || lowText.includes('acheter') || lowText.includes('task')) type = 'task';
-  if (lowText.includes('idée') || lowText.includes('penser à')) type = 'task';
-  if (lowText.includes('rappeler') || lowText.includes('suivi') || lowText.includes('santé') || lowText.includes('migraine')) type = 'tracking';
+  
+  // Detection simple des tâches (mots d'action)
+  const taskKeywords = [
+    'faire', 'acheter', 'appeler', 'finir', 'réparer', 'penser à', 
+    'rappeler', 'envoyer', 'donner', 'prendre', 'voir', 'task'
+  ];
+  
+  if (taskKeywords.some(kw => lowText.includes(kw))) {
+    type = 'task';
+  }
+
+  // Autres types (restent dans l'Inbox si pas classés manuellement, mais detectés pour info)
+  if (lowText.includes('suivi') || lowText.includes('santé') || lowText.includes('migraine')) type = 'tracking';
   if (lowText.includes('lien') || lowText.includes('voir') || lowText.includes('livre') || lowText.includes('notice')) type = 'reference';
   if (lowText.includes('habitude') || lowText.includes('routine') || lowText.includes('exercice')) type = 'routine';
 
