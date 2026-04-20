@@ -204,10 +204,27 @@ const EntryCard = ({ entry, onClick, onDelete }) => (
   </motion.div>
 );
 
+const EmptyState = ({ icon: Icon, title, description, example, actionLabel }) => (
+  <div style={{ textAlign: 'center', padding: '60px 24px', background: 'var(--surface-low)', borderRadius: '24px', border: '1px dashed var(--border-color)' }}>
+    <Icon size={48} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '20px' }} />
+    <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>{title}</h3>
+    <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '20px', lineHeight: '1.5' }}>{description}</p>
+    <div style={{ background: 'var(--surface)', padding: '12px', borderRadius: '12px', fontSize: '12px', display: 'inline-block', border: '1px solid var(--border-color)' }}>
+      <span style={{ opacity: 0.5, marginRight: '8px' }}>Exemple :</span>
+      <span style={{ fontStyle: 'italic', fontWeight: '500' }}>"{example}"</span>
+    </div>
+    {actionLabel && (
+      <div style={{ marginTop: '24px', fontSize: '12px', fontWeight: '700', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+         ↑ {actionLabel}
+      </div>
+    )}
+  </div>
+);
+
 
 // --- Main Screens ---
 
-const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry, onEntryClick, onDeleteEntry }) => {
+const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry, onEntryClick, onDeleteEntry, onNavigate }) => {
   const [inputText, setInputText] = useState('');
   const { isListening, startListening, stopListening } = useSpeechRecognition((transcript) => {
     if (transcript.trim()) {
@@ -242,6 +259,18 @@ const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry,
         </div>
       </header>
 
+      {entries.length < 3 && (
+        <section style={{ marginBottom: '32px', padding: '24px', background: 'var(--primary-container)', borderRadius: '24px', color: 'var(--on-primary-container)' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '8px' }}>Bienvenue 👋</h2>
+          <p style={{ fontSize: '14px', opacity: 0.9, lineHeight: '1.5', marginBottom: '16px' }}>
+            Capturez vos pensées brutes ici. L'application extrait automatiquement les tâches, les dates et les classe pour vous.
+          </p>
+          <div style={{ display: 'flex', gap: '8px', fontSize: '11px', fontWeight: '700', opacity: 0.8, textTransform: 'uppercase' }}>
+            <span>Saisie</span> → <span>Inbox</span> → <span>Classification</span>
+          </div>
+        </section>
+      )}
+
       <section className="glass-card capture-card" style={{ padding: '24px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button 
@@ -267,44 +296,53 @@ const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry,
 
       {inboxCount > 0 && (
         <div 
+          onClick={() => onNavigate('inbox')}
           className="inbox-alert" 
           style={{ 
-            marginBottom: '20px', padding: '12px 20px', borderRadius: '16px', 
-            background: 'var(--primary-container)', color: 'var(--on-primary-container)',
+            marginBottom: '32px', padding: '16px 20px', borderRadius: '16px', 
+            background: 'var(--surface)', border: '1px solid var(--primary)', color: 'var(--primary)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            fontSize: '14px', fontWeight: '500'
+            fontSize: '14px', fontWeight: '700', cursor: 'pointer'
           }}
         >
-          <span>{inboxCount} élément{inboxCount > 1 ? 's' : ''} à traiter dans mon Inbox</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Inbox size={18} />
+            <span>{inboxCount} élément{inboxCount > 1 ? 's' : ''} à trier maintenant</span>
+          </div>
           <ChevronRight size={18} />
         </div>
       )}
 
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Tâches prioritaires</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Priorités du moment</h2>
         </div>
         {priorityTasks.length > 0 ? (
           priorityTasks.map(entry => (
             <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
           ))
         ) : (
-          <p style={{ opacity: 0.5, fontSize: '14px', textAlign: 'center', padding: '20px' }}>Aucune tâche en cours.</p>
+          <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5, fontSize: '14px', border: '1px dashed var(--border-color)', borderRadius: '16px' }}>
+             Utilisez la capture ci-dessus pour ajouter des tâches.
+          </div>
         )}
       </section>
 
-      <section style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-        <button className="space-link" style={{ padding: '20px', background: 'var(--surface-high)', borderRadius: '16px', textAlign: 'left' }}>
-          <Repeat size={20} style={{ marginBottom: '8px', color: 'var(--secondary)' }} />
-          <div style={{ fontWeight: '600', fontSize: '14px' }}>Routines</div>
+      <section style={{ marginTop: '32px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <button onClick={() => onNavigate('routines')} className="space-link" style={{ padding: '20px', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: '16px', textAlign: 'left' }}>
+          <Repeat size={20} style={{ marginBottom: '8px', color: 'var(--primary)' }} />
+          <div style={{ fontWeight: '700', fontSize: '14px' }}>Routines</div>
+          <div style={{ fontSize: '11px', opacity: 0.5 }}>Habitudes & répétitions</div>
         </button>
-        <button className="space-link" style={{ padding: '20px', background: 'var(--surface-high)', borderRadius: '16px', textAlign: 'left' }}>
+        <button onClick={() => onNavigate('tracking')} className="space-link" style={{ padding: '20px', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: '16px', textAlign: 'left' }}>
           <Heart size={20} style={{ marginBottom: '8px', color: 'var(--error)' }} />
-          <div style={{ fontWeight: '600', fontSize: '14px' }}>Suivi</div>
+          <div style={{ fontWeight: '700', fontSize: '14px' }}>Suivi</div>
+          <div style={{ fontSize: '11px', opacity: 0.5 }}>Santé & mesures</div>
         </button>
-        <button className="space-link" style={{ padding: '20px', background: 'var(--surface-high)', borderRadius: '16px', textAlign: 'left', gridColumn: 'span 2' }}>
-          <BookOpen size={20} style={{ marginBottom: '8px', color: 'var(--primary)' }} />
-          <div style={{ fontWeight: '600', fontSize: '14px' }}>Bibliothèque</div>
+        <button onClick={() => onNavigate('library')} className="space-link" style={{ padding: '20px', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: '16px', textAlign: 'left', gridColumn: 'span 2' }}>
+          <BookOpen size={20} style={{ marginBottom: '8px', color: 'var(--secondary)' }} />
+          <div style={{ fontWeight: '700', fontSize: '14px' }}>Bibliothèque</div>
+          <div style={{ fontSize: '11px', opacity: 0.5 }}>Références, liens & archives</div>
         </button>
       </section>
     </div>
@@ -334,10 +372,13 @@ const InboxScreen = ({ entries, onEntryClick, onDeleteEntry, onUpdateEntry }) =>
           </div>
         ))
       ) : (
-        <div style={{ textAlign: 'center', padding: '60px 20px', opacity: 0.5 }}>
-          <Inbox size={48} style={{ marginBottom: '16px' }} />
-          <p>Votre boîte d'entrée est vide.</p>
-        </div>
+        <EmptyState 
+           icon={Inbox}
+           title="Boîte d'entrée vide"
+           description="Tout commence ici. Capturez vos idées brutes sans réfléchir, vous pourrez les traiter plus tard."
+           example="Acheter du pain pour ce soir"
+           actionLabel="Utilisez la capture rapide sur le tableau de bord"
+        />
       )}
     </div>
   );
@@ -361,7 +402,12 @@ const TasksScreen = ({ entries, activeContext, setActiveContext, onEntryClick, o
             <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
           ))
         ) : (
-          <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Aucune tâche dans cet espace.</p>
+          <EmptyState 
+            icon={CheckCircle}
+            title={`Aucune tâche ${activeContext === 'perso' ? 'personnelle' : 'professionnelle'}`}
+            description="Organisez vos actions. Séparez le pro du perso avec le sélecteur ci-dessus."
+            example={activeContext === 'perso' ? "Appeler le dentiste mardi 10h" : "Finir le rapport de performance"}
+          />
         )}
       </section>
     </div>
@@ -384,6 +430,29 @@ const MoreScreen = ({ entries, onEntryClick, onDeleteEntry, explicitType }) => {
     if (activeSubTab === 'reference') return 'Bibliothèque';
   };
 
+  const getEmptyState = () => {
+    if (activeSubTab === 'routines') return {
+      icon: Repeat,
+      title: "Aucune routine",
+      description: "Le secret est dans la répétition. Suivez vos habitudes quotidiennes ici.",
+      example: "Méditation 10 minutes chaque matin"
+    };
+    if (activeSubTab === 'tracking') return {
+      icon: Heart,
+      title: "Aucun suivi",
+      description: "Mesurez ce qui compte pour vous : santé, budget, ou progrès personnels.",
+      example: "Migraine intensité 7/10 ce matin"
+    };
+    return {
+      icon: BookOpen,
+      title: "Bibliothèque vide",
+      description: "Archivez vos ressources pour ne jamais les perdre (liens, livres, notes).",
+      example: "Lien vers la documentation React"
+    };
+  };
+
+  const empty = getEmptyState();
+
   return (
     <div className="app-container">
       <header className="screen-header">
@@ -405,7 +474,7 @@ const MoreScreen = ({ entries, onEntryClick, onDeleteEntry, explicitType }) => {
             <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onDelete={onDeleteEntry} />
           ))
         ) : (
-          <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Espace vide.</p>
+          <EmptyState {...empty} />
         )}
       </section>
     </div>
@@ -573,7 +642,7 @@ export default function App() {
   const renderScreen = () => {
     switch(activeTab) {
       case 'dashboard': 
-        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
       case 'inbox': 
         return <InboxScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onUpdateEntry={updateEntry} />;
       case 'tasks': 
@@ -587,7 +656,7 @@ export default function App() {
       case 'more': 
         return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
       default: 
-        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
     }
   };
 

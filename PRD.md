@@ -50,11 +50,13 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - [x] Webhook Ingestion (POST /api/inbox pour raccourcis iOS)
 - [x] Sécurisation par API Key (Frontend & Backend)
 - [x] Indicateur visuel de synchronisation Cloud
-- [ ] **(Phase 2)** Architecture par Espaces (Dashboard, Inbox, Tâches, Routines, Suivi, Bibliothèque)
-- [ ] **(Phase 2)** Bascule Contextuelle (Perso / Travail)
-- [ ] **(Phase 2)** Système de fiches enrichies (Notes + Résumés)
+- [x] **(Phase 2)** Architecture par Espaces (Dashboard, Inbox, Tâches, Routines, Suivi, Bibliothèque)
+- [x] **(Phase 2)** Bascule Contextuelle (Perso / Travail)
+- [x] **(Phase 2)** Système de fiches enrichies (Notes + Résumés)
+- [ ] **(Phase 3)** Amélioration de l'esthétique (Glassmorphism, Mode Sombre)
+- [ ] **(Phase 3)** Optimisation de la capture vocale (Segmentation plus fine)
 
-### 7. Structure Cible (Phase 2)
+### 7. Structure Actuelle (Phase 2)
 - **Dashboard** : Tâches prioritaires + Capture rapide + Bascule contexte.
 - **Inbox** : Point d'entrée unique pour triage.
 - **Tâches** : Séparation stricte Perso/Travail.

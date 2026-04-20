@@ -71,7 +71,7 @@ export const useStore = () => {
         id: crypto.randomUUID(),
         rawContent: segment,
         reformulatedContent: classification.reformulated,
-        type: classification.type === 'task' ? 'task' : 'inbox', 
+        type: classification.type, 
         category: category,
         context: metadata.context === 'work' ? 'work' : 'perso',
         status: 'todo',
