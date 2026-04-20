@@ -648,13 +648,13 @@ export default function App() {
       case 'tasks': 
         return <TasksScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
       case 'routines':
-        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="routines" />;
+        return <MoreScreen key="routines" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="routines" />;
       case 'tracking':
-        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="tracking" />;
+        return <MoreScreen key="tracking" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="tracking" />;
       case 'library':
-        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="reference" />;
+        return <MoreScreen key="library" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="reference" />;
       case 'more': 
-        return <MoreScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
+        return <MoreScreen key="more" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
       default: 
         return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
     }

@@ -56,22 +56,22 @@ export const useStore = () => {
       .split(/\. |\n| puis | ensuite | et aussi /i)
       .map(s => s.trim())
       .filter(s => s.length > 2);
-    
+
     if (segments.length === 0) return [];
 
     const newEntries = segments.map(segment => {
       const classification = classifyContent(segment);
-      
+
       // Override category if provided in metadata (e.g. from Shortcut)
-      const category = metadata.context 
-        ? (metadata.context.charAt(0).toUpperCase() + metadata.context.slice(1)) 
+      const category = metadata.context
+        ? (metadata.context.charAt(0).toUpperCase() + metadata.context.slice(1))
         : classification.category;
 
       return {
         id: crypto.randomUUID(),
         rawContent: segment,
         reformulatedContent: classification.reformulated,
-        type: classification.type, 
+        type: classification.type,
         category: category,
         context: metadata.context === 'work' ? 'work' : 'perso',
         status: 'todo',
@@ -89,8 +89,8 @@ export const useStore = () => {
   };
 
   const syncWebhook = async () => {
-    const API_URL = 'http://localhost:3001/api/inbox';
-    
+    const API_URL = 'https://captureflow-api.onrender.com/api/inbox';
+
     setIsSyncing(true);
     setLastSyncError(null);
 
@@ -100,18 +100,18 @@ export const useStore = () => {
           'X-API-Key': API_KEY
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`Erreur serveur: ${response.status}`);
       }
-      
+
       const newItems = await response.json();
       if (newItems.length > 0) {
         console.log(`[Webhook] Synchronisation de ${newItems.length} messages`);
         newItems.forEach(item => {
-          addEntry(item.text, { 
-            context: item.context, 
-            source: item.source 
+          addEntry(item.text, {
+            context: item.context,
+            source: item.source
           });
         });
         setIsSyncing(false);
@@ -128,7 +128,7 @@ export const useStore = () => {
   };
 
   const updateEntry = (id, updates) => {
-    const updated = entries.map(e => 
+    const updated = entries.map(e =>
       e.id === id ? { ...e, ...updates, modifiedAt: new Date().toISOString() } : e
     );
     saveEntries(updated);
@@ -139,44 +139,76 @@ export const useStore = () => {
     saveEntries(updated);
   };
 
-  return { 
-    entries, 
-    activeContext, 
-    setActiveContext, 
-    addEntry, 
-    updateEntry, 
-    deleteEntry, 
-    syncWebhook, 
-    isSyncing, 
-    lastSyncError 
+  return {
+    entries,
+    activeContext,
+    setActiveContext,
+    addEntry,
+    updateEntry,
+    deleteEntry,
+    syncWebhook,
+    isSyncing,
+    lastSyncError
   };
 };
 
 // V1 Classification Logic (Regex & Keywords)
 const classifyContent = (text) => {
-  const lowText = text.toLowerCase();
+  const lowText = text.toLowerCase().trim();
   
-  let type = 'inbox';
-  
-  // Detection simple des tâches (mots d'action)
+  // 1. Définition des dictionnaires de mots-clés
   const taskKeywords = [
     'faire', 'acheter', 'appeler', 'finir', 'réparer', 'penser à', 
-    'rappeler', 'envoyer', 'donner', 'prendre', 'voir', 'task', 'rendez-vous'
+    'rappeler', 'envoyer', 'donner', 'prendre', 'voir', 'task', 'rendez-vous',
+    'emmener', 'aller', 'préparer', 'vérifier', 'organiser', 'réserver', 'planifier'
   ];
-  
-  if (taskKeywords.some(kw => lowText.includes(kw))) {
-    type = 'task';
+  const routineKeywords = [
+    'pompes', 'gainage', 'sport', 'routine', 'exercice', 'habitude', 
+    'méditation', 'entraînement', 'vélo', 'yoga', 'étirement'
+  ];
+  const trackingKeywords = [
+    'douleur', 'migraine', 'fatigué', 'humeur', 'santé', 'poids', 
+    'tension', 'sommeil', 'médicament', 'symptôme', 'mal de'
+  ];
+  const referenceKeywords = [
+    'note', 'livre', 'page', 'résumé', 'lien', 'url', 'article', 
+    'référence', 'doc', 'documentation', 'regarder', 'lire'
+  ];
+  const inboxExclusions = ['idée', 'réflexion'];
+
+  let type = 'inbox';
+
+  // 2. Logique de classification Hiérarchique
+  const startsWithAction = taskKeywords.some(verb => lowText.startsWith(verb));
+  const hasInherentExclusion = inboxExclusions.some(word => lowText.includes(word)) || (lowText.includes('penser') && !lowText.includes('penser à'));
+
+  if (startsWithAction && !hasInherentExclusion) {
+    type = 'task'; // Priorité absolue aux verbes d'action
+  } else if (trackingKeywords.some(kw => lowText.includes(kw))) {
+    type = 'tracking';
+  } else if (routineKeywords.some(kw => lowText.includes(kw))) {
+    type = 'routine';
+  } else if (referenceKeywords.some(kw => lowText.includes(kw))) {
+    type = 'reference';
+  } else {
+    // 3. Détection par défaut (phrases courtes sans verbes explicites)
+    const isShortPhrase = lowText.length > 0 && lowText.length < 50;
+    if (!hasInherentExclusion && isShortPhrase) {
+      type = 'task';
+    }
   }
 
-  // Extraction Date & Heure
+  // 4. Extraction Date & Heure
   const { dueDate, dueTime, cleanText } = detectDateTime(text);
 
-  // Autres types (restent dans l'Inbox si pas classés manuellement, mais detectés pour info)
-  if (lowText.includes('suivi') || lowText.includes('santé') || lowText.includes('migraine')) type = 'tracking';
-  if (lowText.includes('lien') || lowText.includes('voir') || lowText.includes('livre') || lowText.includes('notice')) type = 'reference';
-  if (lowText.includes('habitude') || lowText.includes('routine') || lowText.includes('exercice')) type = 'routine';
-
+  // Détermination de la catégorie visuelle (pour l'UI)
   let category = 'Général';
+  if (type === 'tracking') category = 'Santé';
+  if (type === 'routine') category = 'Sport';
+  if (type === 'reference') category = 'Référence';
+  if (lowText.includes('boulot') || lowText.includes('travail') || lowText.includes('réunion')) category = 'Travail';
+  if (lowText.includes('course') || lowText.includes('manger') || lowText.includes('magasin')) category = 'Courses';
+  if (lowText.includes('bois') || lowText.includes('bushcraft') || lowText.includes('couteau')) category = 'Bushcraft';
   if (lowText.includes('boulot') || lowText.includes('travail') || lowText.includes('réunion')) category = 'Travail';
   if (lowText.includes('course') || lowText.includes('manger') || lowText.includes('magasin')) category = 'Courses';
   if (lowText.includes('santé') || lowText.includes('sport') || lowText.includes('docteur')) category = 'Santé';
@@ -185,7 +217,7 @@ const classifyContent = (text) => {
   // Basic reformulation simulation
   let reformulated = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
   if (type === 'task' && !lowText.startsWith('faire') && !lowText.startsWith('à faire')) {
-     reformulated = `À faire : ${reformulated}`;
+    reformulated = `À faire : ${reformulated}`;
   }
 
   return { type, category, reformulated, dueDate, dueTime };
@@ -210,7 +242,7 @@ const detectDateTime = (text) => {
     if (lowText.includes(day)) {
       dueDate = day;
       cleanText = cleanText.replace(new RegExp(day, 'i'), '').trim();
-      break; 
+      break;
     }
   }
 
