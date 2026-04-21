@@ -54,6 +54,7 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - [x] **(Phase 2)** Bascule Contextuelle (Perso / Travail)
 - [x] **(Phase 2)** Système de fiches enrichies (Notes + Résumés)
 - [x] **(Phase 2.1)** Module Rituels / Habitudes (Liste, Minimum Vital, Validation rapide 7 jours)
+- [x] **(Correctif)** Fusion addEntry via state React asynchrone sécurisée sur l'état persistant
 - [ ] **(Phase 3)** Amélioration de l'esthétique (Glassmorphism, Mode Sombre)
 - [ ] **(Phase 3)** Optimisation de la capture vocale (Segmentation plus fine)
 
