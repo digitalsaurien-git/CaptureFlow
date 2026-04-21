@@ -53,14 +53,16 @@ Utilisateurs ayant besoin de réduire leur charge mentale, se dispersant facilem
 - [x] **(Phase 2)** Architecture par Espaces (Dashboard, Inbox, Tâches, Routines, Suivi, Bibliothèque)
 - [x] **(Phase 2)** Bascule Contextuelle (Perso / Travail)
 - [x] **(Phase 2)** Système de fiches enrichies (Notes + Résumés)
+- [x] **(Phase 2.1)** Module Rituels / Habitudes (Liste, Minimum Vital, Validation rapide 7 jours)
 - [ ] **(Phase 3)** Amélioration de l'esthétique (Glassmorphism, Mode Sombre)
 - [ ] **(Phase 3)** Optimisation de la capture vocale (Segmentation plus fine)
 
-### 7. Structure Actuelle (Phase 2)
-- **Dashboard** : Tâches prioritaires + Capture rapide + Bascule contexte.
+### 7. Structure Actuelle (Phase 2.1)
+- **Dashboard** : Tâches prioritaires + Capture rapide + Bascule contexte + Rituels du jour.
 - **Inbox** : Point d'entrée unique pour triage.
 - **Tâches** : Séparation stricte Perso/Travail.
-- **Routines** : Suivi d'habitudes.
+- **Rituels** : Module complet pour le suivi d'habitudes actives, vue 7 jours, mode minimum vital.
+- **Routines** : Liste simple de routines non historisées (ancien module).
 - **Suivi** : Journal de données (Santé, migraines, etc.).
 - **Bibliothèque** : Références et contenus externes.
 

@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'captureflow_entries';
+const RITUALS_STORAGE_KEY = 'captureflow_rituals';
+const RITUAL_LOGS_STORAGE_KEY = 'captureflow_ritual_logs';
 const API_KEY = 'capture-flow-secret-key'; // Doit matcher le backend
 
 export const useStore = () => {
   const [entries, setEntries] = useState([]);
+  const [rituals, setRituals] = useState([]);
+  const [ritualLogs, setRitualLogs] = useState([]);
   const [activeContext, setActiveContext] = useState('perso'); // 'perso' | 'work'
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncError, setLastSyncError] = useState(null);
@@ -41,6 +45,24 @@ export const useStore = () => {
       ];
       setEntries(initial);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    }
+
+    const savedRituals = localStorage.getItem(RITUALS_STORAGE_KEY);
+    if (savedRituals) {
+      setRituals(JSON.parse(savedRituals));
+    } else {
+      const initialRituals = [];
+      setRituals(initialRituals);
+      localStorage.setItem(RITUALS_STORAGE_KEY, JSON.stringify(initialRituals));
+    }
+
+    const savedRitualLogs = localStorage.getItem(RITUAL_LOGS_STORAGE_KEY);
+    if (savedRitualLogs) {
+      setRitualLogs(JSON.parse(savedRitualLogs));
+    } else {
+      const initialLogs = [];
+      setRitualLogs(initialLogs);
+      localStorage.setItem(RITUAL_LOGS_STORAGE_KEY, JSON.stringify(initialLogs));
     }
   }, []);
 
@@ -139,13 +161,76 @@ export const useStore = () => {
     saveEntries(updated);
   };
 
+  const saveRituals = (newRituals) => {
+    setRituals(newRituals);
+    localStorage.setItem(RITUALS_STORAGE_KEY, JSON.stringify(newRituals));
+  };
+
+  const saveRitualLogs = (newLogs) => {
+    setRitualLogs(newLogs);
+    localStorage.setItem(RITUAL_LOGS_STORAGE_KEY, JSON.stringify(newLogs));
+  };
+
+  const addRitual = (ritualData) => {
+    const newRitual = {
+      id: crypto.randomUUID(),
+      name: ritualData.name || '',
+      category: ritualData.category || '',
+      frequencyType: ritualData.frequencyType || 'daily',
+      frequencyTarget: ritualData.frequencyTarget || [1,2,3,4,5,6,0],
+      validationType: ritualData.validationType || 'boolean',
+      targetValue: ritualData.targetValue || null,
+      unit: ritualData.unit || '',
+      isActive: true,
+      isMinimumVital: !!ritualData.isMinimumVital,
+      createdAt: new Date().toISOString(),
+      archivedAt: null,
+      ...ritualData
+    };
+    saveRituals([...rituals, newRitual]);
+    return newRitual;
+  };
+
+  const updateRitual = (id, updates) => {
+    const updated = rituals.map(r => r.id === id ? { ...r, ...updates } : r);
+    saveRituals(updated);
+  };
+
+  const addRitualLog = (ritualId, dateStr, status, value, note) => {
+    const newLog = {
+      id: crypto.randomUUID(),
+      ritualId,
+      date: dateStr, // YYYY-MM-DD
+      status, // 'done', 'skipped', 'partial'
+      value,
+      note,
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Check if log already exists for this date and update it instead
+    const existingIndex = ritualLogs.findIndex(l => l.ritualId === ritualId && l.date === dateStr);
+    
+    if (existingIndex >= 0) {
+      const updatedLogs = [...ritualLogs];
+      updatedLogs[existingIndex] = { ...updatedLogs[existingIndex], ...newLog };
+      saveRitualLogs(updatedLogs);
+    } else {
+      saveRitualLogs([...ritualLogs, newLog]);
+    }
+  };
+
   return {
     entries,
+    rituals,
+    ritualLogs,
     activeContext,
     setActiveContext,
     addEntry,
     updateEntry,
     deleteEntry,
+    addRitual,
+    updateRitual,
+    addRitualLog,
     syncWebhook,
     isSyncing,
     lastSyncError

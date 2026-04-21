@@ -128,6 +128,10 @@ const Sidebar = ({ activeTab, setActiveTab }) => (
         <Repeat size={20} />
         <span>Routines</span>
       </button>
+      <button onClick={() => setActiveTab('rituals')} className={`sidebar-item ${activeTab === 'rituals' ? 'active' : ''}`}>
+        <Check size={20} />
+        <span>Rituels</span>
+      </button>
       <button onClick={() => setActiveTab('tracking')} className={`sidebar-item ${activeTab === 'tracking' ? 'active' : ''}`}>
         <Heart size={20} />
         <span>Suivi</span>
@@ -224,7 +228,7 @@ const EmptyState = ({ icon: Icon, title, description, example, actionLabel }) =>
 
 // --- Main Screens ---
 
-const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry, onEntryClick, onDeleteEntry, onNavigate }) => {
+const DashboardScreen = ({ entries, rituals, ritualLogs, onAddLog, activeContext, setActiveContext, onAddEntry, onEntryClick, onDeleteEntry, onNavigate }) => {
   const [inputText, setInputText] = useState('');
   const { isListening, startListening, stopListening } = useSpeechRecognition((transcript) => {
     if (transcript.trim()) {
@@ -246,6 +250,9 @@ const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry,
   ).slice(0, 3);
 
   const inboxCount = entries.filter(e => e.type === 'inbox').length;
+
+  const today = new Date().toISOString().split('T')[0];
+  const activeRituals = rituals?.filter(r => r.isActive) || [];
 
   return (
     <div className="app-container">
@@ -324,6 +331,52 @@ const DashboardScreen = ({ entries, activeContext, setActiveContext, onAddEntry,
         ) : (
           <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5, fontSize: '14px', border: '1px dashed var(--border-color)', borderRadius: '16px' }}>
              Utilisez la capture ci-dessus pour ajouter des tâches.
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: '24px', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Rituels du jour</h2>
+          <button onClick={() => onNavigate('rituals')} style={{ fontSize: '12px', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+            Voir tout <ChevronRight size={14} />
+          </button>
+        </div>
+        {activeRituals.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {activeRituals.map(ritual => {
+              const log = ritualLogs?.find(l => l.ritualId === ritual.id && l.date === today);
+              const isDone = log?.status === 'done';
+              return (
+                <div key={ritual.id} 
+                  onClick={() => onAddLog(ritual.id, today, isDone ? 'skipped' : 'done', null, null)}
+                  className="glass-card" 
+                  style={{ 
+                    cursor: 'pointer', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: isDone ? 'var(--primary-container)' : 'var(--surface)',
+                    color: isDone ? 'var(--on-primary-container)' : 'var(--on-surface)'
+                  }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ 
+                      width: '24px', height: '24px', borderRadius: '50%', border: '2px solid',
+                      borderColor: isDone ? 'var(--primary)' : 'var(--on-surface-variant)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: isDone ? 'var(--primary)' : 'transparent'
+                    }}>
+                      {isDone && <Check size={14} color="var(--on-primary)" />}
+                    </div>
+                    <span style={{ fontWeight: '500', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.7 : 1 }}>
+                      {ritual.name}
+                    </span>
+                  </div>
+                  {ritual.isMinimumVital && <span style={{ fontSize: '12px', opacity: 0.5 }}>Min. Vital</span>}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{ padding: '16px', borderRadius: '16px', background: 'var(--surface-high)', fontSize: '14px', opacity: 0.7 }}>
+            Aucun rituel actif.
           </div>
         )}
       </section>
@@ -481,6 +534,126 @@ const MoreScreen = ({ entries, onEntryClick, onDeleteEntry, explicitType }) => {
   );
 };
 
+const RitualsScreen = ({ rituals, ritualLogs, onAddRitual, onUpdateRitual, onAddLog }) => {
+  const [newRitualName, setNewRitualName] = useState('');
+  const [isMinVitalMode, setIsMinVitalMode] = useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const handleAdd = () => {
+    if (newRitualName.trim()) {
+      onAddRitual({ name: newRitualName.trim(), isMinimumVital: isMinVitalMode });
+      setNewRitualName('');
+    }
+  };
+
+  const getLogForDay = (ritualId, dateStr) => {
+    return ritualLogs.find(l => l.ritualId === ritualId && l.date === dateStr);
+  };
+
+  const toggleLog = (ritualId, dateStr) => {
+    const log = getLogForDay(ritualId, dateStr);
+    const newStatus = log?.status === 'done' ? 'skipped' : 'done';
+    onAddLog(ritualId, dateStr, newStatus, null, null);
+  };
+
+  // Generate last 7 days
+  const last7Days = Array.from({length: 7}, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d.toISOString().split('T')[0];
+  }).reverse();
+
+  const activeRituals = rituals.filter(r => r.isActive && (!isMinVitalMode || r.isMinimumVital));
+
+  return (
+    <div className="app-container">
+      <header className="screen-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <h1>Rituels</h1>
+          <button 
+            onClick={() => setIsMinVitalMode(!isMinVitalMode)}
+            className={`tag ${isMinVitalMode ? 'active-tag' : ''}`}
+            style={{ fontWeight: '600' }}
+          >
+            Minimum Vital
+          </button>
+        </div>
+      </header>
+
+      <section className="glass-card" style={{ padding: '16px', marginBottom: '24px', display: 'flex', gap: '8px' }}>
+        <input 
+          value={newRitualName}
+          onChange={(e) => setNewRitualName(e.target.value)}
+          placeholder="Nouveau rituel..."
+          style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--on-surface)' }}
+          onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+        />
+        <button onClick={handleAdd} className="add-button" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <Plus size={20} />
+        </button>
+      </section>
+
+      <section>
+        {activeRituals.map(ritual => (
+          <div key={ritual.id} className="glass-card" style={{ padding: '16px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600' }}>
+                {ritual.name}
+                {ritual.isMinimumVital && <span style={{ color: 'var(--primary)', marginLeft: '8px', fontSize: '12px' }}>★</span>}
+              </h3>
+              <button 
+                onClick={() => onUpdateRitual(ritual.id, { isActive: false })}
+                style={{ fontSize: '12px', opacity: 0.5 }}
+              >
+                Archiver
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '4px', justifyContent: 'space-between' }}>
+              {last7Days.map(dateStr => {
+                const log = getLogForDay(ritual.id, dateStr);
+                const isToday = dateStr === today;
+                return (
+                  <button 
+                    key={dateStr}
+                    onClick={() => toggleLog(ritual.id, dateStr)}
+                    style={{ 
+                      flex: 1, 
+                      height: '36px', 
+                      borderRadius: '6px',
+                      background: log?.status === 'done' ? 'var(--primary)' : 'var(--surface-high)',
+                      border: isToday ? '1px solid var(--on-surface)' : 'none',
+                      opacity: isToday ? 1 : 0.7,
+                      color: log?.status === 'done' ? 'var(--on-primary)' : 'var(--on-surface-variant)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                    title={dateStr}
+                  >
+                    {log?.status === 'done' && <Check size={16} />}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '10px', opacity: 0.5 }}>
+              <span>J-6</span>
+              <span>Aujourd'hui</span>
+            </div>
+          </div>
+        ))}
+        {activeRituals.length === 0 && (
+          <EmptyState 
+            icon={CheckCircle}
+            title="Aucun rituel actif"
+            description="Créez des rituels pour construire vos habitudes quotidiennes."
+            example="Méditation, Lecture, Sport..."
+          />
+        )}
+      </section>
+    </div>
+  );
+};
+
 
 const DetailView = ({ entry, onClose, onUpdate, onDelete }) => {
   const [reformulated, setReformulated] = useState(entry.reformulatedContent);
@@ -614,11 +787,16 @@ const SyncStatus = () => {
 export default function App() {
   const { 
     entries, 
+    rituals,
+    ritualLogs,
     activeContext, 
     setActiveContext, 
     addEntry, 
     updateEntry, 
     deleteEntry, 
+    addRitual,
+    updateRitual,
+    addRitualLog,
     syncWebhook 
   } = useStore();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -642,13 +820,15 @@ export default function App() {
   const renderScreen = () => {
     switch(activeTab) {
       case 'dashboard': 
-        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
+        return <DashboardScreen entries={entries} rituals={rituals} ritualLogs={ritualLogs} onAddLog={addRitualLog} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
       case 'inbox': 
         return <InboxScreen entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onUpdateEntry={updateEntry} />;
       case 'tasks': 
         return <TasksScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
       case 'routines':
         return <MoreScreen key="routines" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="routines" />;
+      case 'rituals':
+        return <RitualsScreen rituals={rituals} ritualLogs={ritualLogs} onAddRitual={addRitual} onUpdateRitual={updateRitual} onAddLog={addRitualLog} />;
       case 'tracking':
         return <MoreScreen key="tracking" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} explicitType="tracking" />;
       case 'library':
@@ -656,7 +836,7 @@ export default function App() {
       case 'more': 
         return <MoreScreen key="more" entries={entries} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} />;
       default: 
-        return <DashboardScreen entries={entries} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
+        return <DashboardScreen entries={entries} rituals={rituals} ritualLogs={ritualLogs} onAddLog={addRitualLog} activeContext={activeContext} setActiveContext={setActiveContext} onAddEntry={addEntry} onEntryClick={setSelectedEntry} onDeleteEntry={deleteEntry} onNavigate={setActiveTab} />;
     }
   };
 
