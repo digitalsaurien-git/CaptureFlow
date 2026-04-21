@@ -105,8 +105,12 @@ export const useStore = () => {
       };
     });
 
-    const updated = [...newEntries, ...entries];
-    saveEntries(updated);
+    setEntries(prevEntries => {
+      const currentEntries = JSON.parse(localStorage.getItem(STORAGE_KEY)) || prevEntries;
+      const updated = [...newEntries, ...currentEntries];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
     return newEntries;
   };
 
