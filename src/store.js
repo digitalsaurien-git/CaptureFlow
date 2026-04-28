@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
+
 
 const STORAGE_KEY = 'captureflow_entries';
 const RITUALS_STORAGE_KEY = 'captureflow_rituals';
@@ -13,58 +15,107 @@ export const useStore = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncError, setLastSyncError] = useState(null);
 
+  // Helpers de mapping JS <-> DB
+  const mapToDB = (entry, userId) => ({
+    id: entry.id,
+    user_id: userId,
+    raw_content: entry.rawContent,
+    reformulated_content: entry.reformulatedContent,
+    type: entry.type,
+    category: entry.category,
+    context: entry.context,
+    status: entry.status,
+    due_date: entry.dueDate,
+    due_time: entry.dueTime,
+    source: entry.source,
+    created_at: entry.createdAt,
+    modified_at: entry.modifiedAt,
+    notes: entry.notes || null
+  });
+
+  const mapFromDB = (row) => ({
+    id: row.id,
+    rawContent: row.raw_content,
+    reformulatedContent: row.reformulated_content,
+    type: row.type,
+    category: row.category,
+    context: row.context,
+    status: row.status,
+    dueDate: row.due_date,
+    dueTime: row.due_time,
+    source: row.source,
+    createdAt: row.created_at,
+    modifiedAt: row.modified_at,
+    notes: row.notes
+  });
+
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setEntries(JSON.parse(saved));
-    } else {
-      // Sample data for V1
-      const initial = [
-        {
-          id: '1',
-          rawContent: 'Acheter des sardines pour le bivouac bushcraft',
-          reformulatedContent: 'À faire : Acheter des sardines pour le bivouac bushcraft',
-          type: 'task',
-          category: 'Bushcraft',
-          context: 'perso',
-          status: 'todo',
-          createdAt: new Date().toISOString(),
-          modifiedAt: new Date().toISOString()
-        },
-        {
-          id: '2',
-          rawContent: 'Idée de génie pour le projet CaptureFlow',
-          reformulatedContent: 'Idée de génie pour le projet CaptureFlow',
-          type: 'task',
-          category: 'Idées',
-          context: 'work',
-          status: 'todo',
-          createdAt: new Date().toISOString(),
-          modifiedAt: new Date().toISOString()
+    const init = async () => {
+      // 1. Chargement initial LocalStorage (Cache rapide)
+      const saved = localStorage.getItem(STORAGE_KEY);
+      let currentEntries = [];
+      if (saved) {
+        currentEntries = JSON.parse(saved);
+      } else {
+        // Données d'exemple pour V1 si vide
+        currentEntries = [
+          {
+            id: '1',
+            rawContent: 'Acheter des sardines pour le bivouac bushcraft',
+            reformulatedContent: 'À faire : Acheter des sardines pour le bivouac bushcraft',
+            type: 'task',
+            category: 'Bushcraft',
+            context: 'perso',
+            status: 'todo',
+            createdAt: new Date().toISOString(),
+            modifiedAt: new Date().toISOString()
+          },
+          {
+            id: '2',
+            rawContent: 'Idée de génie pour le projet CaptureFlow',
+            reformulatedContent: 'Idée de génie pour le projet CaptureFlow',
+            type: 'task',
+            category: 'Idées',
+            context: 'work',
+            status: 'todo',
+            createdAt: new Date().toISOString(),
+            modifiedAt: new Date().toISOString()
+          }
+        ];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentEntries));
+      }
+      setEntries(currentEntries);
+
+      // 2. Synchronisation Supabase (si connecté)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: dbEntries, error } = await supabase
+            .from('cf_entries')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (!error && dbEntries && dbEntries.length > 0) {
+            const mapped = dbEntries.map(mapFromDB);
+            setEntries(mapped);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped));
+          }
         }
-      ];
-      setEntries(initial);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    }
+      } catch (err) {
+        console.warn('[Sync Load Error]', err);
+      }
 
-    const savedRituals = localStorage.getItem(RITUALS_STORAGE_KEY);
-    if (savedRituals) {
-      setRituals(JSON.parse(savedRituals));
-    } else {
-      const initialRituals = [];
-      setRituals(initialRituals);
-      localStorage.setItem(RITUALS_STORAGE_KEY, JSON.stringify(initialRituals));
-    }
+      // Rituels et Logs (inchangés localement)
+      const savedRituals = localStorage.getItem(RITUALS_STORAGE_KEY);
+      if (savedRituals) setRituals(JSON.parse(savedRituals));
+      
+      const savedRitualLogs = localStorage.getItem(RITUAL_LOGS_STORAGE_KEY);
+      if (savedRitualLogs) setRitualLogs(JSON.parse(savedRitualLogs));
+    };
 
-    const savedRitualLogs = localStorage.getItem(RITUAL_LOGS_STORAGE_KEY);
-    if (savedRitualLogs) {
-      setRitualLogs(JSON.parse(savedRitualLogs));
-    } else {
-      const initialLogs = [];
-      setRitualLogs(initialLogs);
-      localStorage.setItem(RITUAL_LOGS_STORAGE_KEY, JSON.stringify(initialLogs));
-    }
+    init();
   }, []);
+
 
   const saveEntries = (newEntries) => {
     setEntries(newEntries);
@@ -72,8 +123,6 @@ export const useStore = () => {
   };
 
   const addEntry = (rawContent, metadata = {}) => {
-    // Split by common connectors: period, newline, or explicit keywords
-    // This simulates AI segmentation for V1
     const segments = rawContent
       .split(/\. |\n| puis | ensuite | et aussi /i)
       .map(s => s.trim())
@@ -83,8 +132,6 @@ export const useStore = () => {
 
     const newEntries = segments.map(segment => {
       const classification = classifyContent(segment);
-
-      // Override category if provided in metadata (e.g. from Shortcut)
       const category = metadata.context
         ? (metadata.context.charAt(0).toUpperCase() + metadata.context.slice(1))
         : classification.category;
@@ -101,18 +148,36 @@ export const useStore = () => {
         dueTime: classification.dueTime || null,
         source: metadata.source || 'app',
         createdAt: new Date().toISOString(),
-        modifiedAt: new Date().toISOString()
+        modifiedAt: new Date().toISOString(),
+        notes: null
       };
     });
 
+    // Mise à jour locale immédiate
     setEntries(prevEntries => {
       const currentEntries = JSON.parse(localStorage.getItem(STORAGE_KEY)) || prevEntries;
       const updated = [...newEntries, ...currentEntries];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       return updated;
     });
+
+    // Sync Supabase asynchrone
+    const syncCloud = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const dbRows = newEntries.map(e => mapToDB(e, session.user.id));
+          await supabase.from('cf_entries').upsert(dbRows);
+        }
+      } catch (err) {
+        console.warn('[Sync Add Error]', err);
+      }
+    };
+    syncCloud();
+
     return newEntries;
   };
+
 
   const syncWebhook = async () => {
     const API_URL = 'https://captureflow-api.onrender.com/api/inbox';
@@ -158,12 +223,40 @@ export const useStore = () => {
       e.id === id ? { ...e, ...updates, modifiedAt: new Date().toISOString() } : e
     );
     saveEntries(updated);
+
+    const syncCloud = async () => {
+      try {
+        const entryToSync = updated.find(e => e.id === id);
+        if (entryToSync) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await supabase.from('cf_entries').upsert(mapToDB(entryToSync, session.user.id));
+          }
+        }
+      } catch (err) {
+        console.warn('[Sync Update Error]', err);
+      }
+    };
+    syncCloud();
   };
 
   const deleteEntry = (id) => {
     const updated = entries.filter(e => e.id !== id);
     saveEntries(updated);
+
+    const syncCloud = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await supabase.from('cf_entries').delete().eq('id', id).eq('user_id', session.user.id);
+        }
+      } catch (err) {
+        console.warn('[Sync Delete Error]', err);
+      }
+    };
+    syncCloud();
   };
+
 
   const saveRituals = (newRituals) => {
     setRituals(newRituals);

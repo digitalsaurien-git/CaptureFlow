@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from './store';
+import { supabase, isSupabaseConfigured } from './supabase';
+
 import { 
   Plus, 
   Mic, 
@@ -141,6 +143,11 @@ const Sidebar = ({ activeTab, setActiveTab }) => (
         <span>Bibliothèque</span>
       </button>
     </nav>
+    <div style={{ marginTop: 'auto', padding: '16px' }}>
+      <button onClick={() => supabase.auth.signOut()} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)', fontSize: '14px', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px' }}>
+        <span>Déconnexion</span>
+      </button>
+    </div>
   </aside>
 );
 
@@ -784,7 +791,92 @@ const SyncStatus = () => {
 
 // --- Main App ---
 
+const LoginScreen = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', background: 'var(--bg-color)', color: 'var(--on-surface)' }}>
+      <form onSubmit={handleLogin} className="glass-card" style={{ padding: '32px', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <h2 style={{ textAlign: 'center', marginBottom: '16px' }}>CaptureFlow Login</h2>
+        {error && <div style={{ color: 'var(--error)', fontSize: '14px', textAlign: 'center' }}>{error}</div>}
+        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--on-surface)' }} />
+        <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--on-surface)' }} />
+        <button type="submit" disabled={loading} style={{ height: '48px', borderRadius: '8px', width: '100%', background: 'var(--primary)', color: 'var(--on-primary)', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
+          {loading ? 'Connexion...' : 'Se connecter'}
+        </button>
+      </form>
+    </div>
+  );
+};
+
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setAuthInitialized(true);
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthInitialized(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (!authInitialized) return null;
+
+  if (!isSupabaseConfigured) {
+    return (
+      <div style={{ 
+        display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', 
+        background: 'var(--bg-color)', color: 'var(--on-surface)', textAlign: 'center', padding: '20px' 
+      }}>
+        <div className="glass-card" style={{ padding: '40px', maxWidth: '500px', border: '1px solid var(--error)' }}>
+          <CloudOff size={48} style={{ color: 'var(--error)', marginBottom: '20px' }} />
+          <h2 style={{ marginBottom: '16px', color: 'var(--error)' }}>Configuration Manquante</h2>
+          <p style={{ lineHeight: '1.6', marginBottom: '24px' }}>
+            Les variables d'environnement <strong>VITE_SUPABASE_URL</strong> et <strong>VITE_SUPABASE_ANON_KEY</strong> sont absentes de votre fichier .env.local.
+          </p>
+          <div style={{ background: 'var(--surface-high)', padding: '16px', borderRadius: '12px', fontSize: '13px', textAlign: 'left', fontFamily: 'monospace' }}>
+            # Exemple .env.local<br/>
+            VITE_SUPABASE_URL=votre_url<br/>
+            VITE_SUPABASE_ANON_KEY=votre_cle
+          </div>
+          <p style={{ marginTop: '24px', fontSize: '14px', opacity: 0.7 }}>
+            Veuillez configurer ces variables et redémarrer le serveur Vite.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) return <LoginScreen />;
+
+  return <CaptureFlowMain />;
+}
+
+
+function CaptureFlowMain() {
   const { 
     entries, 
     rituals,
