@@ -33,21 +33,29 @@ export const useStore = () => {
     notes: entry.notes || null
   });
 
-  const mapFromDB = (row) => ({
-    id: row.id,
-    rawContent: row.raw_content,
-    reformulatedContent: row.reformulated_content,
-    type: row.type,
-    category: row.category,
-    context: row.context,
-    status: row.status,
-    dueDate: row.due_date,
-    dueTime: row.due_time,
-    source: row.source,
-    createdAt: row.created_at,
-    modifiedAt: row.modified_at,
-    notes: row.notes
-  });
+  const mapFromDB = (row) => {
+    const validTypes = ['task', 'routine', 'tracking', 'reference', 'inbox'];
+    let type = row.type;
+    if (!type || !validTypes.includes(type)) {
+      type = 'inbox';
+    }
+
+    return {
+      id: row.id,
+      rawContent: row.raw_content,
+      reformulatedContent: row.reformulated_content || row.raw_content,
+      type: type,
+      category: row.category,
+      context: row.context,
+      status: row.status || 'todo',
+      dueDate: row.due_date,
+      dueTime: row.due_time,
+      source: row.source,
+      createdAt: row.created_at,
+      modifiedAt: row.modified_at,
+      notes: row.notes
+    };
+  };
 
   useEffect(() => {
     const init = async () => {

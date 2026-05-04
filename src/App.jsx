@@ -256,7 +256,13 @@ const DashboardScreen = ({ entries, rituals, ritualLogs, onAddLog, activeContext
     e.status === 'todo'
   ).slice(0, 3);
 
-  const inboxCount = entries.filter(e => e.type === 'inbox').length;
+  const validContexts = ['perso', 'work'];
+  const validTypes = ['task', 'routine', 'tracking', 'reference'];
+  const inboxCount = entries.filter(e => 
+    e.type === 'inbox' || 
+    !validTypes.includes(e.type) || 
+    (e.type === 'task' && !validContexts.includes(e.context))
+  ).length;
 
   const today = new Date().toISOString().split('T')[0];
   const activeRituals = rituals?.filter(r => r.isActive) || [];
@@ -410,7 +416,13 @@ const DashboardScreen = ({ entries, rituals, ritualLogs, onAddLog, activeContext
 };
 
 const InboxScreen = ({ entries, onEntryClick, onDeleteEntry, onUpdateEntry }) => {
-  const inboxItems = entries.filter(e => e.type === 'inbox');
+  const validContexts = ['perso', 'work'];
+  const validTypes = ['task', 'routine', 'tracking', 'reference'];
+  const inboxItems = entries.filter(e => 
+    e.type === 'inbox' || 
+    !validTypes.includes(e.type) || 
+    (e.type === 'task' && !validContexts.includes(e.context))
+  );
 
   return (
     <div className="app-container">
