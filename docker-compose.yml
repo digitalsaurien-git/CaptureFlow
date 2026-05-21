@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: captureflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: captureflow
+      POSTGRES_USER: captureflow
+      POSTGRES_PASSWORD: captureflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - captureflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U captureflow -d captureflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  captureflow_postgres_data:
