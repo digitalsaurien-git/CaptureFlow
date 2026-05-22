@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { VoiceTextInput } from "@/components/common/VoiceTextInput";
 
 type TaskFormProps = {
   onCreated?: () => void;
@@ -41,34 +42,26 @@ export function TaskForm({ onCreated, projectId }: TaskFormProps) {
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
-      <div>
-        <label className="block text-sm font-medium text-slate-700" htmlFor="task-title">
-          Titre
-        </label>
-        <input
-          className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-950 shadow-sm outline-none focus:border-slate-500"
-          id="task-title"
-          maxLength={160}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Nouvelle tache"
-          required
-          value={title}
-        />
-      </div>
+      <VoiceTextInput
+        id="task-title"
+        label="Titre"
+        maxLength={160}
+        onChange={setTitle}
+        placeholder="Nouvelle tache"
+        required
+        value={title}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700" htmlFor="task-description">
-          Description
-        </label>
-        <textarea
-          className="mt-1 min-h-20 w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-slate-950 shadow-sm outline-none focus:border-slate-500"
-          id="task-description"
-          maxLength={5000}
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder="Details utiles"
-          value={description}
-        />
-      </div>
+      <VoiceTextInput
+        className="mt-1 min-h-20 w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-slate-950 shadow-sm outline-none focus:border-slate-500"
+        id="task-description"
+        label="Description"
+        maxLength={5000}
+        onChange={setDescription}
+        placeholder="Details utiles"
+        rows="textarea"
+        value={description}
+      />
 
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
