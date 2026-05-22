@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { updateTrainingItem } from "@/lib/training-service";
+import { archiveTrainingItem, updateTrainingItem } from "@/lib/training-service";
 import { updateTrainingItemSchema } from "@/lib/training-validations";
 
 type RouteContext = {
@@ -20,8 +20,23 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const item = await updateTrainingItem(id, result.data);
+    if (!item) {
+      return NextResponse.json({ error: "Training item not found." }, { status: 404 });
+    }
+
     return NextResponse.json({ item });
   } catch {
     return NextResponse.json({ error: "Training item not found." }, { status: 404 });
   }
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const item = await archiveTrainingItem(id);
+
+  if (!item) {
+    return NextResponse.json({ error: "Training item not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ item });
 }

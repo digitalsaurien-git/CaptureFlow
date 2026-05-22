@@ -1,4 +1,4 @@
-import type { Prisma, ProgressStep } from "@prisma/client";
+import { TrainingItemStatus, TrainingStatus, type Prisma, type ProgressStep } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type {
   CreateTrainingInput,
@@ -19,6 +19,7 @@ const progressValues: Record<ProgressStep, number> = {
 
 const trainingDetailInclude = {
   items: {
+    where: { status: TrainingItemStatus.ACTIVE },
     orderBy: { position: "asc" as const },
     include: {
       notes: {
@@ -68,6 +69,7 @@ function normalizeTrainingItemInput(
 
 export async function listTrainings() {
   return prisma.training.findMany({
+    where: { status: TrainingStatus.ACTIVE },
     orderBy: { updatedAt: "desc" }
   });
 }
@@ -76,14 +78,15 @@ export async function createTraining(input: CreateTrainingInput) {
   return prisma.training.create({
     data: {
       title: input.title,
-      description: input.description || null
+      description: input.description || null,
+      status: TrainingStatus.ACTIVE
     }
   });
 }
 
 export async function getTraining(id: string) {
-  const training = await prisma.training.findUnique({
-    where: { id },
+  const training = await prisma.training.findFirst({
+    where: { id, status: TrainingStatus.ACTIVE },
     include: trainingDetailInclude
   });
 
@@ -91,6 +94,15 @@ export async function getTraining(id: string) {
 }
 
 export async function updateTraining(id: string, input: UpdateTrainingInput) {
+  const training = await prisma.training.findFirst({
+    where: { id, status: TrainingStatus.ACTIVE },
+    select: { id: true }
+  });
+
+  if (!training) {
+    return null;
+  }
+
   return prisma.training.update({
     where: { id },
     data: {
@@ -100,12 +112,28 @@ export async function updateTraining(id: string, input: UpdateTrainingInput) {
   });
 }
 
+export async function archiveTraining(id: string) {
+  const training = await prisma.training.findFirst({
+    where: { id, status: TrainingStatus.ACTIVE },
+    select: { id: true }
+  });
+
+  if (!training) {
+    return null;
+  }
+
+  return prisma.training.update({
+    where: { id },
+    data: { status: TrainingStatus.ARCHIVED }
+  });
+}
+
 export async function createTrainingItem(
   trainingId: string,
   input: CreateTrainingItemInput
 ) {
-  const training = await prisma.training.findUnique({
-    where: { id: trainingId },
+  const training = await prisma.training.findFirst({
+    where: { id: trainingId, status: TrainingStatus.ACTIVE },
     select: { id: true }
   });
 
@@ -114,7 +142,7 @@ export async function createTrainingItem(
   }
 
   const maxPositionItem = await prisma.trainingItem.findFirst({
-    where: { trainingId },
+    where: { trainingId, status: TrainingItemStatus.ACTIVE },
     orderBy: { position: "desc" },
     select: { position: true }
   });
@@ -128,12 +156,22 @@ export async function createTrainingItem(
       durationMinutes: input.durationMinutes,
       progress: normalized.progress ?? "P0",
       isDone: normalized.isDone ?? false,
+      status: TrainingItemStatus.ACTIVE,
       position: (maxPositionItem?.position ?? -1) + 1
     }
   });
 }
 
 export async function updateTrainingItem(id: string, input: UpdateTrainingItemInput) {
+  const item = await prisma.trainingItem.findFirst({
+    where: { id, status: TrainingItemStatus.ACTIVE },
+    select: { id: true }
+  });
+
+  if (!item) {
+    return null;
+  }
+
   const normalized = normalizeTrainingItemInput(input);
 
   return prisma.trainingItem.update({
@@ -147,14 +185,40 @@ export async function updateTrainingItem(id: string, input: UpdateTrainingItemIn
   });
 }
 
+export async function archiveTrainingItem(id: string) {
+  const item = await prisma.trainingItem.findFirst({
+    where: { id, status: TrainingItemStatus.ACTIVE },
+    select: { id: true }
+  });
+
+  if (!item) {
+    return null;
+  }
+
+  return prisma.trainingItem.update({
+    where: { id },
+    data: { status: TrainingItemStatus.ARCHIVED }
+  });
+}
+
 export async function reorderTrainingItems(
   trainingId: string,
   input: ReorderTrainingItemsInput
 ) {
+  const training = await prisma.training.findFirst({
+    where: { id: trainingId, status: TrainingStatus.ACTIVE },
+    select: { id: true }
+  });
+
+  if (!training) {
+    return null;
+  }
+
   const items = await prisma.trainingItem.findMany({
     where: {
       id: { in: input.itemIds },
-      trainingId
+      trainingId,
+      status: TrainingItemStatus.ACTIVE
     },
     select: { id: true }
   });

@@ -12,7 +12,11 @@ export type TrainingItemView = {
 type TrainingItemProps = {
   canMoveDown: boolean;
   canMoveUp: boolean;
+  isConfirmingArchive: boolean;
   item: TrainingItemView;
+  onArchive: (itemId: string) => void;
+  onCancelArchive: () => void;
+  onRequestArchive: (itemId: string) => void;
   onMoveDown: (itemId: string) => void;
   onMoveUp: (itemId: string) => void;
   onUpdate: (itemId: string, payload: { progress?: string; isDone?: boolean }) => void;
@@ -23,7 +27,11 @@ const progressSteps = ["P0", "P20", "P40", "P60", "P80", "P100"] as const;
 export function TrainingItem({
   canMoveDown,
   canMoveUp,
+  isConfirmingArchive,
   item,
+  onArchive,
+  onCancelArchive,
+  onRequestArchive,
   onMoveDown,
   onMoveUp,
   onUpdate
@@ -84,7 +92,36 @@ export function TrainingItem({
         >
           Descendre
         </button>
+        <button
+          className="rounded border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+          onClick={() => onRequestArchive(item.id)}
+          type="button"
+        >
+          Archiver
+        </button>
       </div>
+
+      {isConfirmingArchive ? (
+        <div className="mt-3 rounded border border-red-200 bg-red-50 p-3">
+          <p className="text-sm text-red-800">Archiver cette video ou ce chapitre ?</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              className="rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800"
+              onClick={() => onArchive(item.id)}
+              type="button"
+            >
+              Oui, archiver
+            </button>
+            <button
+              className="rounded border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+              onClick={onCancelArchive}
+              type="button"
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

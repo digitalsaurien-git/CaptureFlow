@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   TrainingItem,
   type TrainingItemView
@@ -12,6 +13,8 @@ type TrainingItemListProps = {
 };
 
 export function TrainingItemList({ items, onChanged, trainingId }: TrainingItemListProps) {
+  const [confirmingItemId, setConfirmingItemId] = useState<string | null>(null);
+
   async function updateItem(
     itemId: string,
     payload: { progress?: string; isDone?: boolean }
@@ -35,6 +38,17 @@ export function TrainingItemList({ items, onChanged, trainingId }: TrainingItemL
     });
 
     if (response.ok) {
+      onChanged?.();
+    }
+  }
+
+  async function archiveItem(itemId: string) {
+    const response = await fetch(`/api/training-items/${itemId}`, {
+      method: "DELETE"
+    });
+
+    if (response.ok) {
+      setConfirmingItemId(null);
       onChanged?.();
     }
   }
@@ -73,10 +87,14 @@ export function TrainingItemList({ items, onChanged, trainingId }: TrainingItemL
         <TrainingItem
           canMoveDown={index < items.length - 1}
           canMoveUp={index > 0}
+          isConfirmingArchive={confirmingItemId === item.id}
           item={item}
           key={item.id}
+          onArchive={(itemId) => void archiveItem(itemId)}
+          onCancelArchive={() => setConfirmingItemId(null)}
           onMoveDown={(itemId) => moveItem(itemId, 1)}
           onMoveUp={(itemId) => moveItem(itemId, -1)}
+          onRequestArchive={(itemId) => setConfirmingItemId(itemId)}
           onUpdate={(itemId, payload) => void updateItem(itemId, payload)}
         />
       ))}

@@ -18,6 +18,7 @@ type TrainingListProps = {
 
 export function TrainingList({ refreshKey = 0 }: TrainingListProps) {
   const [trainings, setTrainings] = useState<TrainingSummary[]>([]);
+  const [confirmingTrainingId, setConfirmingTrainingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -42,6 +43,20 @@ export function TrainingList({ refreshKey = 0 }: TrainingListProps) {
   useEffect(() => {
     void loadTrainings();
   }, [loadTrainings, refreshKey]);
+
+  async function archiveTraining(trainingId: string) {
+    const response = await fetch(`/api/trainings/${trainingId}`, {
+      method: "DELETE"
+    });
+
+    if (!response.ok) {
+      setError("La formation n'a pas pu etre archivee.");
+      return;
+    }
+
+    setConfirmingTrainingId(null);
+    await loadTrainings();
+  }
 
   if (isLoading) {
     return <p className="text-sm text-slate-600">Chargement...</p>;
@@ -92,14 +107,43 @@ export function TrainingList({ refreshKey = 0 }: TrainingListProps) {
             ) : null}
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Link
               className="rounded bg-slate-950 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
               href={`/trainings/${training.id}`}
             >
               Ouvrir
             </Link>
+            <button
+              className="rounded border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+              onClick={() => setConfirmingTrainingId(training.id)}
+              type="button"
+            >
+              Archiver
+            </button>
           </div>
+
+          {confirmingTrainingId === training.id ? (
+            <div className="mt-3 rounded border border-red-200 bg-red-50 p-3">
+              <p className="text-sm text-red-800">Archiver cette formation ?</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  className="rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800"
+                  onClick={() => void archiveTraining(training.id)}
+                  type="button"
+                >
+                  Oui, archiver
+                </button>
+                <button
+                  className="rounded border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                  onClick={() => setConfirmingTrainingId(null)}
+                  type="button"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          ) : null}
         </article>
       ))}
     </div>

@@ -51,6 +51,16 @@ enum TaskStatus {
   ARCHIVED
 }
 
+enum TrainingStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TrainingItemStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 model Project {
   id          String        @id @default(cuid())
   title       String
@@ -112,12 +122,14 @@ model Training {
   id          String         @id @default(cuid())
   title       String
   description String?
+  status      TrainingStatus @default(ACTIVE)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
   items       TrainingItem[]
   notes       Note[]
 
+  @@index([status])
   @@index([createdAt])
 }
 
@@ -126,6 +138,7 @@ model TrainingItem {
   trainingId      String
   title           String
   durationMinutes Int
+  status          TrainingItemStatus @default(ACTIVE)
   progress        ProgressStep @default(P0)
   isDone          Boolean      @default(false)
   position        Int
@@ -136,6 +149,7 @@ model TrainingItem {
   notes           Note[]
 
   @@index([trainingId])
+  @@index([status])
   @@index([position])
   @@index([isDone])
 }
