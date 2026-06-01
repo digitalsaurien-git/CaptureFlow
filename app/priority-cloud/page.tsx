@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CaptureForm } from "@/components/CaptureForm";
-import { CaptureList } from "@/components/CaptureList";
+import { PriorityCloudForm } from "@/components/priority-cloud/PriorityCloudForm";
+import { PriorityCloudView } from "@/components/priority-cloud/PriorityCloudView";
 
-export default function HomePage() {
+export default function PriorityCloudPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
@@ -16,8 +16,12 @@ export default function HomePage() {
             CaptureFlow V1
           </p>
           <h1 className="mt-2 text-3xl font-semibold text-slate-950">
-            Capture rapide
+            Nuage prioritaire
           </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+            Videz rapidement votre tete avec des mots, mini-taches ou courtes expressions.
+            Plus le poids est eleve, plus l'element prend de place dans le nuage.
+          </p>
         </div>
         <nav className="flex flex-wrap gap-2 text-sm">
           <Link className="rounded px-3 py-2 text-slate-700 hover:bg-white" href="/">
@@ -29,34 +33,20 @@ export default function HomePage() {
           <Link className="rounded px-3 py-2 text-slate-700 hover:bg-white" href="/trainings">
             Formations
           </Link>
-          <Link className="rounded px-3 py-2 text-slate-700 hover:bg-white" href="/priority-cloud">
-            Nuage
-          </Link>
-          <Link className="rounded px-3 py-2 text-slate-700 hover:bg-white" href="/inbox">
-            Inbox
-          </Link>
-          <Link className="rounded px-3 py-2 text-slate-700 hover:bg-white" href="/archive">
-            Archive
-          </Link>
         </nav>
       </header>
 
-      <div className="grid gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+      <div className="grid gap-8 py-8 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         <section>
-          <h2 className="text-lg font-semibold text-slate-950">Nouvelle capture</h2>
+          <h2 className="text-lg font-semibold text-slate-950">Nouvel element</h2>
           <div className="mt-4 rounded border border-slate-200 bg-white p-5 shadow-sm">
-            <CaptureForm onCreated={() => setRefreshKey((value) => value + 1)} />
+            <PriorityCloudForm onCreated={() => setRefreshKey((value) => value + 1)} />
           </div>
         </section>
 
         <section>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-950">Dernieres captures</h2>
-            <Link className="text-sm font-medium text-slate-700 hover:text-slate-950" href="/inbox">
-              Tout voir
-            </Link>
-          </div>
-          <CaptureList refreshKey={refreshKey} />
+          <h2 className="mb-4 text-lg font-semibold text-slate-950">Nuage actif</h2>
+          <PriorityCloudView refreshKey={refreshKey} />
         </section>
       </div>
     </main>
