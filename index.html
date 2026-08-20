@@ -1,25 +1,321 @@
 <!doctype html>
 <html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>CaptureFlow | Votre Cerveau Externe</title>
-    <meta name="description" content="Capturez rapidement vos idées, tâches et notes avec CaptureFlow." />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      /* Mobile optimization to prevent zooming on input focus */
-      @media screen and (max-width: 768px) {
-        input, textarea, select {
-          font-size: 16px !important;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CaptureFlow</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="authScreen" class="auth-screen">
+    <form id="loginForm" class="auth-card">
+      <div class="brand auth-brand">
+        <div class="brand-mark">CF</div>
+        <div><h1>CaptureFlow</h1><p>Espace synchronisé</p></div>
+      </div>
+      <p class="muted">Connecte-toi pour retrouver les mêmes données au travail et à la maison.</p>
+      <label>Identifiant
+        <input id="loginUsername" autocomplete="username" required />
+      </label>
+      <label>Mot de passe
+        <input id="loginPassword" type="password" autocomplete="current-password" required />
+      </label>
+      <p id="loginError" class="auth-error hidden"></p>
+      <button id="loginButton" class="btn primary" type="submit">Se connecter</button>
+    </form>
+  </div>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">CF</div>
+        <div>
+          <h1>CaptureFlow</h1>
+          <p>Synchronisé</p>
+        </div>
+      </div>
+
+      <nav id="mainNav">
+        <button class="nav-btn active" data-view="dashboard">Tableau de bord</button>
+        <button class="nav-btn" data-view="notes">Post-it</button>
+        <button class="nav-btn" data-view="projects">Projets</button>
+        <button class="nav-btn" data-view="admin">Administration</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="profile-switch">
+          <label for="contextFilter">Contexte</label>
+          <select id="contextFilter">
+            <option value="all">Tout</option>
+            <option value="pro">Professionnel</option>
+            <option value="perso">Personnel</option>
+          </select>
+        </div>
+        <div class="profile-switch">
+          <label for="priorityFilter">Priorité</label>
+          <select id="priorityFilter">
+            <option value="all">Toutes</option>
+            <option value="urgent">Urgente</option>
+            <option value="high">Haute</option>
+            <option value="medium">Moyenne</option>
+            <option value="low">Basse</option>
+          </select>
+        </div>
+        <span id="saveState" class="save-state">Sauvegarde locale active</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="viewTitle">Aujourd’hui</h2>
+          <p id="viewSubtitle">Tes priorités et tâches du jour</p>
+        </div>
+        <div class="top-actions">
+          <button id="logoutBtn" class="btn secondary" title="Se déconnecter">Déconnexion</button>
+          <button id="voiceQuickBtn" class="btn secondary" title="Dicter une tâche">🎤 Dicter</button>
+          <button id="quickAddBtn" class="btn primary">+ Nouvelle tâche</button>
+        </div>
+      </header>
+
+      <section id="todayView" class="view"></section>
+      <section id="calendarView" class="view"></section>
+      <section id="inboxView" class="view"></section>
+      <section id="kanbanView" class="view"></section>
+      <section id="projectsView" class="view"></section>
+      <section id="projectDetailView" class="view"></section>
+      <section id="activityView" class="view"></section>
+      <section id="improvementsView" class="view"></section>
+      <section id="wellView" class="view"></section>
+      <section id="notesView" class="view"></section>
+      <section id="dashboardView" class="view active"></section>
+      <section id="adminView" class="view"></section>
+    </main>
+  </div>
+
+  <dialog id="taskDialog" class="modal">
+    <form method="dialog" id="taskForm">
+      <div class="modal-head">
+        <h3 id="taskDialogTitle">Nouvelle tâche</h3>
+        <button type="button" class="icon-btn" data-close="taskDialog">×</button>
+      </div>
+
+      <input type="hidden" id="taskId" />
+
+      <label>Titre
+        <div class="input-with-action">
+          <input id="taskTitle" required maxlength="180" placeholder="Ex. Préparer le point hebdomadaire" />
+          <button type="button" id="voiceTitleBtn" class="icon-btn" title="Dicter">🎤</button>
+        </div>
+      </label>
+
+      <label>Description
+        <div class="input-with-action">
+          <textarea id="taskDescription" rows="4" placeholder="Contexte, résultat attendu, liens..."></textarea>
+          <button type="button" id="voiceDescriptionBtn" class="icon-btn" title="Dicter">🎤</button>
+        </div>
+      </label>
+
+      <label>Reste à faire
+        <div class="input-with-action">
+          <textarea id="taskRemaining" rows="4" placeholder="Ce qu’il reste précisément à faire lorsque je reprendrai cette tâche..."></textarea>
+          <button type="button" id="voiceRemainingBtn" class="icon-btn" title="Dicter le reste à faire">🎤</button>
+        </div>
+      </label>
+
+      <div class="form-grid">
+        <label>Contexte
+          <select id="taskContext">
+            <option value="pro">Professionnel</option>
+            <option value="perso">Personnel</option>
+          </select>
+        </label>
+
+        <label>Projet
+          <select id="taskProject"></select>
+        </label>
+
+        <label>Statut
+          <select id="taskStatus">
+            <option value="inbox">Corbeille</option>
+            <option value="today">À faire aujourd’hui</option>
+            <option value="doing">En cours</option>
+            <option value="waiting">En attente</option>
+            <option value="done">Terminé</option>
+            <option value="well">Puits</option>
+          </select>
+        </label>
+
+        <label>Priorité
+          <select id="taskPriority">
+            <option value="low">Basse</option>
+            <option value="medium" selected>Moyenne</option>
+            <option value="high">Haute</option>
+            <option value="urgent">Urgente</option>
+          </select>
+        </label>
+
+        <label>Échéance
+          <input id="taskDueDate" type="date" />
+        </label>
+
+        <label>Durée estimée (min)
+          <input id="taskEstimate" type="number" min="0" step="5" value="30" />
+        </label>
+      </div>
+
+      <label>Étiquettes
+        <input id="taskTags" placeholder="Ex. RH, urgent, réunion" />
+      </label>
+
+      <div class="task-checklist-editor">
+        <div class="task-title-row">
+          <label style="margin:0">Checklist / étapes</label>
+          <button type="button" class="btn small secondary" id="addChecklistItemBtn">+ Ajouter une étape</button>
+        </div>
+        <div id="taskChecklistEditor" class="checklist-editor"></div>
+      </div>
+
+      <div id="taskActivitySummary" class="activity-summary hidden"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn danger hidden" id="deleteTaskBtn">Supprimer</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn secondary" data-close="taskDialog">Annuler</button>
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="projectDialog" class="modal">
+    <form method="dialog" id="projectForm">
+      <div class="modal-head">
+        <h3 id="projectDialogTitle">Nouveau projet</h3>
+        <button type="button" class="icon-btn" data-close="projectDialog">×</button>
+      </div>
+      <input type="hidden" id="projectId" />
+      <label>Nom
+        <input id="projectName" required maxlength="120" />
+      </label>
+      <label>Description
+        <textarea id="projectDescription" rows="4"></textarea>
+      </label>
+      <div class="form-grid">
+        <label>Contexte
+          <select id="projectContext">
+            <option value="pro">Professionnel</option>
+            <option value="perso">Personnel</option>
+          </select>
+        </label>
+        <label>Statut
+          <select id="projectStatus">
+            <option value="active">Actif</option>
+            <option value="paused">En pause</option>
+            <option value="completed">Terminé</option>
+          </select>
+        </label>
+        <label>Date cible
+          <input id="projectDueDate" type="date" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn danger hidden" id="deleteProjectBtn">Supprimer</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn secondary" data-close="projectDialog">Annuler</button>
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="recurringDialog" class="modal">
+    <form method="dialog" id="recurringForm">
+      <div class="modal-head">
+        <h3 id="recurringDialogTitle">Nouvelle tâche récurrente</h3>
+        <button type="button" class="icon-btn" data-close="recurringDialog">×</button>
+      </div>
+      <input type="hidden" id="recurringId" />
+      <label>Libellé
+        <div class="input-with-action">
+          <input id="recurringTitle" required maxlength="180" placeholder="Ex. Revue hebdomadaire des demandes" />
+          <button type="button" id="voiceRecurringTitleBtn" class="icon-btn">🎤</button>
+        </div>
+      </label>
+      <div class="form-grid">
+        <label>Contexte
+          <select id="recurringContext"><option value="pro">Professionnel</option><option value="perso">Personnel</option></select>
+        </label>
+        <label>Projet
+          <select id="recurringProject"></select>
+        </label>
+        <label>Fréquence
+          <select id="recurringFrequency"><option value="daily">Tous les jours</option><option value="weekly" selected>Toutes les semaines</option></select>
+        </label>
+        <label>Jour (si hebdomadaire)
+          <select id="recurringWeekday">
+            <option value="1">Lundi</option><option value="2">Mardi</option><option value="3">Mercredi</option>
+            <option value="4">Jeudi</option><option value="5">Vendredi</option><option value="6">Samedi</option><option value="0">Dimanche</option>
+          </select>
+        </label>
+        <label>Durée estimée (min)
+          <input id="recurringEstimate" type="number" min="0" step="5" value="30" />
+        </label>
+        <label>Priorité
+          <select id="recurringPriority"><option value="low">Basse</option><option value="medium" selected>Moyenne</option><option value="high">Haute</option><option value="urgent">Urgente</option></select>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn danger hidden" id="deleteRecurringBtn">Supprimer</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn secondary" data-close="recurringDialog">Annuler</button>
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="noteDialog" class="modal">
+    <form method="dialog" id="noteForm">
+      <div class="modal-head">
+        <h3 id="noteDialogTitle">Nouveau post-it</h3>
+        <button type="button" class="icon-btn" data-close="noteDialog">×</button>
+      </div>
+      <input type="hidden" id="noteId" />
+      <label>Titre
+        <input id="noteTitle" required maxlength="120" />
+      </label>
+      <label>Contenu
+        <div class="input-with-action">
+          <textarea id="noteContent" rows="7"></textarea>
+          <button type="button" id="voiceNoteBtn" class="icon-btn" title="Dicter">🎤</button>
+        </div>
+      </label>
+      <div class="form-grid">
+        <label>Contexte
+          <select id="noteContext">
+            <option value="pro">Professionnel</option>
+            <option value="perso">Personnel</option>
+          </select>
+        </label>
+        <label>Couleur
+          <select id="noteColor">
+            <option value="yellow">Jaune</option>
+            <option value="blue">Bleu</option>
+            <option value="green">Vert</option>
+            <option value="pink">Rose</option>
+            <option value="orange">Orange</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn danger hidden" id="deleteNoteBtn">Supprimer</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn secondary" data-close="noteDialog">Annuler</button>
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <input type="file" id="jsonFileInput" accept=".json,application/json" hidden />
+  <input type="file" id="mergeJsonFileInput" accept=".json,application/json" hidden />
+  <script src="app.js"></script>
+</body>
 </html>
