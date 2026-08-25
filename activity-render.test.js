@@ -49,3 +49,13 @@ test("seuls les temps non validés alimentent le bandeau de correction", () => {
   });
   assert.match(html, /1 temps à corriger/);
 });
+
+test("les temps déjà corrigés dans une sauvegarde V6 sont validés par la migration V7", () => {
+  const html = renderActivityWith({
+    meta: { version: 6 },
+    settings: { contextFilter: "all", priorityFilter: "all", activityTab: "summary" },
+    projects: [], notes: [], improvements: [], recurringTasks: [], activitySessions: [],
+    tasks: [{ id: "t1", title: "Temps déjà corrigé", context: "pro", priority: "medium", legacyTimeSeconds: 900 }]
+  });
+  assert.doesNotMatch(html, /temps à corriger/);
+});

@@ -1,7 +1,7 @@
 const STORAGE_KEY = "captureflow_local_v1";
 
 const defaultState = {
-  meta: { version: 6, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  meta: { version: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
   projects: [],
   tasks: [],
@@ -39,6 +39,7 @@ function fmtDate(v){ if(!v) return ""; return new Date(v+"T12:00:00").toLocaleDa
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
 function normalizeState(parsed){
+  const sourceVersion=Number(parsed?.meta?.version)||0;
   const merged = { ...structuredClone(defaultState), ...(parsed||{}),
     meta:{...defaultState.meta,...(parsed?.meta||{})},
     settings:{...defaultState.settings,...(parsed?.settings||{})},
@@ -49,7 +50,7 @@ function normalizeState(parsed){
     improvements:Array.isArray(parsed?.improvements)?parsed.improvements:[],
     recurringTasks:Array.isArray(parsed?.recurringTasks)?parsed.recurringTasks:[]
   };
-  merged.meta.version=6;
+  merged.meta.version=7;
   merged.tasks.forEach((t,i)=>{
     if(!Array.isArray(t.checklist)) t.checklist=[];
     if(t.remaining===undefined) t.remaining="";
@@ -58,7 +59,7 @@ function normalizeState(parsed){
       const journaled=merged.activitySessions.filter(s=>s.taskId===t.id).reduce((sum,s)=>sum+(Number(s.durationSeconds)||0),0);
       t.legacyTimeSeconds=Math.max(0,(Number(t.timeSpentSeconds)||0)-journaled);
     }
-    if(t.legacyTimeReviewed===undefined) t.legacyTimeReviewed=false;
+    if(t.legacyTimeReviewed===undefined) t.legacyTimeReviewed=sourceVersion>0&&sourceVersion<7;
   });
   merged.improvements.forEach(item=>{ if(!item.context) item.context="pro"; });
   return merged;

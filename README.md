@@ -1,4 +1,4 @@
-# CaptureFlow — version web synchronisée V6
+# CaptureFlow — version web synchronisée V7
 
 CaptureFlow réunit dans une seule application les tâches, projets, post-it, tâches récurrentes, améliorations et journaux d’activité professionnels et personnels.
 
