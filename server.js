@@ -174,7 +174,7 @@ app.put("/api/state", requireAuth, async (req, res, next) => {
   }
 });
 
-for (const asset of ["index.html", "app.js", "styles.css"]) {
+for (const asset of ["index.html", "app.js", "logic.js", "styles.css"]) {
   app.get(asset === "index.html" ? ["/", "/index.html"] : `/${asset}`, (_req, res) => {
     res.sendFile(path.join(__dirname, asset));
   });
