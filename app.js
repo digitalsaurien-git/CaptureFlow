@@ -647,7 +647,7 @@ function deleteSession(id){
 function setActivityTab(tab){
   state.settings.activityTab=tab;
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  renderActivity();
+  renderCurrent();
 }
 function activityTaskTable(rows, emptyMessage="Aucune activité tâche enregistrée."){
   if(!rows.length)return empty(emptyMessage);

@@ -21,6 +21,24 @@ function renderActivityWith(data) {
   return activityView.innerHTML;
 }
 
+function switchEmbeddedActivityTab(data, tab) {
+  const elements = new Map();
+  const element = id => {
+    if(!elements.has(id)) elements.set(id, { innerHTML: "", classList: { add: () => {}, remove: () => {}, toggle: () => {} } });
+    return elements.get(id);
+  };
+  const source = fs.readFileSync("./app.js", "utf8").split('\ndocument.querySelectorAll(".nav-btn").forEach')[0];
+  const context = {
+    CaptureFlowLogic: logic,
+    console,
+    structuredClone,
+    localStorage: { getItem: () => JSON.stringify(data), setItem: () => {} },
+    document: { getElementById: element, querySelectorAll: () => [] }
+  };
+  vm.runInNewContext(`${source}\nrenderDashboard(); setActivityTab(${JSON.stringify(tab)}); globalThis.visibleHtml=document.getElementById("dashboardView").innerHTML;`, context);
+  return context.visibleHtml;
+}
+
 test("le journal présente les vues synthèse, projet, sans projet, sessions et corrections", () => {
   const html = renderActivityWith({
     meta: { version: 6 },
@@ -58,4 +76,16 @@ test("les temps déjà corrigés dans une sauvegarde V6 sont validés par la mig
     tasks: [{ id: "t1", title: "Temps déjà corrigé", context: "pro", priority: "medium", legacyTimeSeconds: 900 }]
   });
   assert.doesNotMatch(html, /temps à corriger/);
+});
+
+test("un onglet du journal intégré au tableau de bord rafraîchit bien la vue visible", () => {
+  const html = switchEmbeddedActivityTab({
+    meta: { version: 7 },
+    settings: { currentView: "dashboard", dashboardTab: "activity", activityTab: "withoutProject", contextFilter: "all", priorityFilter: "all" },
+    projects: [], notes: [], improvements: [], recurringTasks: [], activitySessions: [],
+    tasks: [{ id: "t1", title: "Temps à revoir", context: "pro", priority: "medium", legacyTimeSeconds: 900, legacyTimeReviewed: false }]
+  }, "corrections");
+  assert.match(html, /activity-tab active[^>]*>À corriger/);
+  assert.match(html, /Temps à revoir/);
+  assert.match(html, /Corriger et valider/);
 });
