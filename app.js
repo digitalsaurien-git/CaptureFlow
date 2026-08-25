@@ -2,7 +2,7 @@ const STORAGE_KEY = "captureflow_local_v1";
 
 const defaultState = {
   meta: { version: 6, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
+  settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
   projects: [],
   tasks: [],
   notes: [],
@@ -58,6 +58,7 @@ function normalizeState(parsed){
       const journaled=merged.activitySessions.filter(s=>s.taskId===t.id).reduce((sum,s)=>sum+(Number(s.durationSeconds)||0),0);
       t.legacyTimeSeconds=Math.max(0,(Number(t.timeSpentSeconds)||0)-journaled);
     }
+    if(t.legacyTimeReviewed===undefined) t.legacyTimeReviewed=false;
   });
   merged.improvements.forEach(item=>{ if(!item.context) item.context="pro"; });
   return merged;
@@ -166,7 +167,7 @@ async function initializeCloud(){
   }
 }
 
-const priorityRank = { urgent: 0, high: 1, medium: 2, low: 3 };
+const { priorityRank, priorityManualSort, isUnreviewedLegacyTask, isUnreviewedLongSession } = CaptureFlowLogic;
 function filtered(items){
   const c = state.settings.contextFilter;
   const p = state.settings.priorityFilter || "all";
@@ -229,7 +230,7 @@ function projectName(id){
 }
 
 function manualTaskSort(items){
-  return [...items].sort((a,b)=>(Number(a.manualOrder)||0)-(Number(b.manualOrder)||0));
+  return priorityManualSort(items);
 }
 function normalizeOrder(items){
   items.forEach((t,i)=>t.manualOrder=i);
@@ -237,9 +238,10 @@ function normalizeOrder(items){
 function moveTask(id,direction,scope="project"){
   const t=state.tasks.find(x=>x.id===id); if(!t)return;
   let items=[];
-  if(scope==="project") items=manualTaskSort(state.tasks.filter(x=>x.projectId===t.projectId));
-  else if(scope==="today") items=manualTaskSort(state.tasks.filter(x=>(x.status==="today" || (x.dueDate===todayISO() && x.status!=="done"))));
-  else items=manualTaskSort(state.tasks.filter(x=>!x.projectId));
+  if(scope==="project") items=state.tasks.filter(x=>x.projectId===t.projectId);
+  else if(scope==="today") items=state.tasks.filter(x=>(x.status==="today" || (x.dueDate===todayISO() && x.status!=="done")));
+  else items=state.tasks.filter(x=>!x.projectId);
+  items=manualTaskSort(items.filter(x=>(priorityRank[x.priority]??9)===(priorityRank[t.priority]??9)));
   const i=items.findIndex(x=>x.id===id), j=i+direction;
   if(i<0||j<0||j>=items.length)return;
   [items[i].manualOrder,items[j].manualOrder]=[items[j].manualOrder,items[i].manualOrder];
@@ -603,6 +605,10 @@ function activityContextSessions(){
   const c=state.settings.contextFilter;
   return state.activitySessions.filter(s=>c==="all"||s.context===c);
 }
+function activityContextTasks(){
+  const c=state.settings.contextFilter;
+  return state.tasks.filter(t=>c==="all"||t.context===c);
+}
 function setLegacyTime(taskId){
   const t=state.tasks.find(x=>x.id===taskId); if(!t)return;
   const minutes=prompt("Temps ancien non journalisé pour cette tâche, en minutes :", String(Math.round(legacySeconds(t)/60)));
@@ -610,7 +616,9 @@ function setLegacyTime(taskId){
   const n=Number(minutes);
   if(Number.isNaN(n)||n<0){alert("Durée invalide.");return}
   t.legacyTimeSeconds=Math.round(n*60);
+  t.legacyTimeReviewed=true;
   t.timeSpentSeconds=t.legacyTimeSeconds+sessionTotal(taskSessions(t.id));
+  t.updatedAt=new Date().toISOString();
   saveState();
 }
 function editSession(id){
@@ -620,6 +628,8 @@ function editSession(id){
   const n=Number(minutes);
   if(Number.isNaN(n)||n<0){alert("Durée invalide.");return}
   s.durationSeconds=Math.round(n*60);
+  s.reviewedAt=new Date().toISOString();
+  s.updatedAt=new Date().toISOString();
   const t=state.tasks.find(x=>x.id===s.taskId);
   if(t)t.timeSpentSeconds=legacySeconds(t)+sessionTotal(taskSessions(t.id));
   saveState();
@@ -633,49 +643,79 @@ function deleteSession(id){
     saveState();
   }
 }
+function setActivityTab(tab){
+  state.settings.activityTab=tab;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderActivity();
+}
+function activityTaskTable(rows, emptyMessage="Aucune activité tâche enregistrée."){
+  if(!rows.length)return empty(emptyMessage);
+  return `<div class="card table-wrap"><table class="table"><thead><tr><th>Tâche</th><th>Projet</th><th>Sessions</th><th>Temps total</th><th>Première</th><th>Dernière</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.project)}</td><td>${x.sessions}</td><td><strong>${formatDurationLong(x.total)}</strong></td><td>${x.first?fmtDateTime(x.first):"—"}</td><td>${x.last?fmtDateTime(x.last):"—"}</td></tr>`).join("")}</tbody></table></div>`;
+}
 function renderActivity(){
   const sessions=[...activityContextSessions()].sort((a,b)=>(b.startedAt||"").localeCompare(a.startedAt||""));
-  const total=sessionTotal(sessions), range=sessionRange(sessions);
-  const taskIds=[...new Set(sessions.map(s=>s.taskId).filter(Boolean))];
-  const projectIds=[...new Set(sessions.map(s=>s.projectId).filter(Boolean))];
+  const contextTasks=activityContextTasks();
+  const total=sessionTotal(sessions)+contextTasks.reduce((sum,t)=>sum+legacySeconds(t),0), range=sessionRange(sessions);
+  const taskIds=[...new Set([...sessions.map(s=>s.taskId).filter(Boolean),...contextTasks.filter(t=>legacySeconds(t)>0).map(t=>t.id)])];
 
   const taskRows=taskIds.map(id=>{
     const t=state.tasks.find(x=>x.id===id);
     const ss=sessions.filter(s=>s.taskId===id), r=sessionRange(ss);
-    return {name:t?.title||"Tâche supprimée",project:t?.projectId?projectName(t.projectId):"—",sessions:ss.length,total:(t?legacySeconds(t):0)+sessionTotal(ss),first:r.first,last:r.last};
+    const projectId=t?.projectId||ss.find(s=>s.projectId)?.projectId||null;
+    return {id,name:t?.title||"Tâche supprimée",projectId,project:projectId?projectName(projectId):"—",sessions:ss.length,total:(t?legacySeconds(t):0)+sessionTotal(ss),first:r.first,last:r.last};
   }).sort((a,b)=>b.total-a.total);
 
   const projectRows=filtered(state.projects).map(p=>{
     const ss=sessions.filter(s=>s.projectId===p.id), r=sessionRange(ss);
     const attachedTasks=state.tasks.filter(t=>t.projectId===p.id && (state.settings.contextFilter==="all"||t.context===state.settings.contextFilter));
     const legacy=attachedTasks.reduce((sum,t)=>sum+legacySeconds(t),0);
-    return {name:p.name,tasks:attachedTasks.length,sessions:ss.length,total:legacy+sessionTotal(ss),first:r.first,last:r.last};
-  }).sort((a,b)=>b.total-a.total);
+    return {id:p.id,name:p.name,tasks:attachedTasks.length,sessions:ss.length,total:legacy+sessionTotal(ss),first:r.first,last:r.last};
+  }).filter(x=>x.total>0||x.sessions>0).sort((a,b)=>b.total-a.total);
 
   const running=state.tasks.filter(t=>t.timerStartedAt && (state.settings.contextFilter==="all"||t.context===state.settings.contextFilter));
-  const legacyTasks=filtered(state.tasks).filter(t=>legacySeconds(t)>0);
+  const legacyTasks=contextTasks.filter(isUnreviewedLegacyTask);
+  const longSessions=sessions.filter(isUnreviewedLongSession);
+  const correctionCount=legacyTasks.length+longSessions.length;
+  const tab=state.settings.activityTab||"summary";
+  const tabButton=(key,label,count="")=>`<button class="activity-tab ${tab===key?"active":""}" onclick="setActivityTab('${key}')">${label}${count!==""?` <span>${count}</span>`:""}</button>`;
+  const projectGroups=projectRows.map(project=>{
+    const rows=taskRows.filter(task=>task.projectId===project.id);
+    return `<details class="activity-group"><summary><span><strong>${esc(project.name)}</strong><small>${project.tasks} tâche(s) · ${project.sessions} session(s)</small></span><strong>${formatDurationLong(project.total)}</strong></summary>${activityTaskTable(rows,"Aucune tâche chronométrée dans ce projet.")}</details>`;
+  }).join("");
+  const withoutProject=taskRows.filter(task=>!task.projectId);
+  let body="";
+  if(tab==="projects"){
+    body=projectGroups||empty("Aucune activité rattachée à un projet.");
+  }else if(tab==="withoutProject"){
+    body=activityTaskTable(withoutProject,"Aucune activité sans projet.");
+  }else if(tab==="sessions"){
+    body=`<div class="card table-wrap">${sessions.length?`<table class="table"><thead><tr><th>Début</th><th>Fin</th><th>Tâche</th><th>Projet</th><th>Durée</th><th>Correction</th></tr></thead><tbody>${sessions.map(s=>{
+      const t=state.tasks.find(x=>x.id===s.taskId), p=state.projects.find(x=>x.id===s.projectId);
+      const warning=isUnreviewedLongSession(s);
+      return `<tr class="${warning?"session-warning":""}"><td>${fmtDateTime(s.startedAt)}</td><td>${fmtDateTime(s.endedAt)}</td><td>${esc(t?.title||"Tâche supprimée")}</td><td>${esc(p?.name||"—")}</td><td><strong>${formatDurationLong(s.durationSeconds)}</strong>${warning?" ⚠":""}</td><td><button class="btn small secondary" onclick="editSession('${s.id}')">Corriger</button> <button class="btn small danger" onclick="deleteSession('${s.id}')">Supprimer</button></td></tr>`;
+    }).join("")}</tbody></table>`:empty("Aucune session enregistrée.")}</div>`;
+  }else if(tab==="corrections"){
+    body=`${legacyTasks.length?`<div class="card correction-list"><h3>Temps anciens sans détail</h3>${legacyTasks.map(t=>`<div><span>${esc(t.title)} : <strong>${formatDurationLong(legacySeconds(t))}</strong></span><button class="btn small secondary" onclick="setLegacyTime('${t.id}')">Corriger et valider</button></div>`).join("")}</div>`:""}
+      ${longSessions.length?`<div class="card correction-list"><h3>Sessions longues à vérifier</h3>${longSessions.map(s=>{const t=state.tasks.find(x=>x.id===s.taskId);return `<div><span>${esc(t?.title||"Tâche supprimée")} : <strong>${formatDurationLong(s.durationSeconds)}</strong></span><button class="btn small secondary" onclick="editSession('${s.id}')">Corriger et valider</button></div>`;}).join("")}</div>`:""}
+      ${!correctionCount?empty("Aucun temps à corriger."):""}`;
+  }else{
+    body=`<div class="grid activity-overview-grid">
+      <div class="card"><h3>Projets actifs</h3>${projectRows.slice(0,5).map(x=>`<div class="activity-ranking"><span>${esc(x.name)}</span><strong>${formatDurationLong(x.total)}</strong></div>`).join("")||`<p class="muted">Aucune activité projet.</p>`}</div>
+      <div class="card"><h3>Tâches les plus suivies</h3>${taskRows.slice(0,5).map(x=>`<div class="activity-ranking"><span>${esc(x.name)}</span><strong>${formatDurationLong(x.total)}</strong></div>`).join("")||`<p class="muted">Aucune activité tâche.</p>`}</div>
+    </div>`;
+  }
 
   document.getElementById("activityView").innerHTML=`
     ${running.length?`<div class="warning-box"><strong>Chronomètre actif :</strong> ${running.map(t=>`${esc(t.title)} — ${formatDurationLong(elapsedSeconds(t))}${elapsedSeconds(t)>14400?" ⚠ durée à vérifier":""}`).join("<br>")}</div>`:""}
-    ${legacyTasks.length?`<div class="warning-box"><strong>Temps anciens sans détail de session :</strong> ces durées viennent d’une version antérieure. Tu peux les corriger si un chrono avait été oublié.<div class="legacy-list">${legacyTasks.map(t=>`<span>${esc(t.title)} : <strong>${formatDurationLong(legacySeconds(t))}</strong> <button class="btn small secondary" onclick="setLegacyTime('${t.id}')">Corriger</button></span>`).join("")}</div></div>`:""}
+    ${correctionCount?`<button class="warning-box warning-button" onclick="setActivityTab('corrections')"><strong>${correctionCount} temps à corriger</strong> · Ouvrir la liste</button>`:""}
     <div class="grid stats-grid">
       <div class="card"><div class="muted">Temps enregistré</div><div class="stat-value">${formatDurationLong(total)}</div></div>
       <div class="card"><div class="muted">Sessions</div><div class="stat-value">${sessions.length}</div></div>
       <div class="card"><div class="muted">Tâches tracées</div><div class="stat-value">${taskIds.length}</div></div>
       <div class="card"><div class="muted">Période</div><div class="stat-small">${range.first?`${fmtDateTime(range.first)}<br>→ ${fmtDateTime(range.last)}`:"Aucune session"}</div></div>
     </div>
-
-    <div class="section-title"><h3>Récapitulatif par projet</h3></div>
-    <div class="card table-wrap">${projectRows.length?`<table class="table"><thead><tr><th>Projet</th><th>Tâches</th><th>Sessions</th><th>Temps total</th><th>Du</th><th>Au</th></tr></thead><tbody>${projectRows.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.tasks}</td><td>${x.sessions}</td><td><strong>${formatDurationLong(x.total)}</strong></td><td>${fmtDateTime(x.first)}</td><td>${fmtDateTime(x.last)}</td></tr>`).join("")}</tbody></table>`:empty("Aucune activité projet enregistrée.")}</div>
-
-    <div class="section-title"><h3>Récapitulatif par tâche</h3></div>
-    <div class="card table-wrap">${taskRows.length?`<table class="table"><thead><tr><th>Tâche</th><th>Projet</th><th>Sessions</th><th>Temps total</th><th>Première</th><th>Dernière</th></tr></thead><tbody>${taskRows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.project)}</td><td>${x.sessions}</td><td><strong>${formatDurationLong(x.total)}</strong></td><td>${fmtDateTime(x.first)}</td><td>${fmtDateTime(x.last)}</td></tr>`).join("")}</tbody></table>`:empty("Aucune activité tâche enregistrée.")}</div>
-
-    <div class="section-title"><h3>Détail des sessions</h3></div>
-    <div class="card table-wrap">${sessions.length?`<table class="table"><thead><tr><th>Début</th><th>Fin</th><th>Tâche</th><th>Projet</th><th>Durée</th><th>Correction</th></tr></thead><tbody>${sessions.map(s=>{
-      const t=state.tasks.find(x=>x.id===s.taskId), p=state.projects.find(x=>x.id===s.projectId);
-      return `<tr class="${s.durationSeconds>14400?"session-warning":""}"><td>${fmtDateTime(s.startedAt)}</td><td>${fmtDateTime(s.endedAt)}</td><td>${esc(t?.title||"Tâche supprimée")}</td><td>${esc(p?.name||"—")}</td><td><strong>${formatDurationLong(s.durationSeconds)}</strong>${s.durationSeconds>14400?" ⚠":""}</td><td><button class="btn small secondary" onclick="editSession('${s.id}')">Corriger</button> <button class="btn small danger" onclick="deleteSession('${s.id}')">Supprimer</button></td></tr>`;
-    }).join("")}</tbody></table>`:empty("Aucune session enregistrée.")}</div>`;
+    <div class="activity-tabs">${tabButton("summary","Synthèse")}${tabButton("projects","Par projet",projectRows.length)}${tabButton("withoutProject","Sans projet",withoutProject.length)}${tabButton("sessions","Détail des sessions",sessions.length)}${tabButton("corrections","À corriger",correctionCount)}</div>
+    <div class="activity-tab-body">${body}</div>`;
 }
 
 function addImprovement(text=null){
@@ -964,12 +1004,13 @@ function saveTaskFromForm(){
     estimate:Number(document.getElementById("taskEstimate").value)||0,
     tags:document.getElementById("taskTags").value.split(",").map(x=>x.trim()).filter(Boolean),
     checklist:readChecklistEditor(),
-    manualOrder:existing?.manualOrder ?? Date.now(),
+    manualOrder:existing && existing.priority===document.getElementById("taskPriority").value?existing.manualOrder:Date.now(),
     createdAt:existing?.createdAt||new Date().toISOString(),
     updatedAt:new Date().toISOString(),
     completedAt:status==="done"?(existing?.completedAt||new Date().toISOString()):null,
     timeSpentSeconds:existing?.timeSpentSeconds||0,
     legacyTimeSeconds:existing?.legacyTimeSeconds||0,
+    legacyTimeReviewed:existing?.legacyTimeReviewed||false,
     timerStartedAt:status==="done"?null:(existing?.timerStartedAt||null)
   };
   if(status==="done" && existing?.timerStartedAt){
@@ -1049,6 +1090,7 @@ function stopTimer(t){
   const startedAt=t.timerStartedAt;
   const endedAt=new Date().toISOString();
   let durationSeconds=Math.max(1,Math.floor((new Date(endedAt)-new Date(startedAt))/1000));
+  let reviewedAt=null;
 
   if(durationSeconds > 14400){
     const actualMinutes=prompt(
@@ -1059,6 +1101,7 @@ Le chrono a peut-être été oublié. Indique la durée réelle en minutes, ou v
     );
     if(actualMinutes!==null && actualMinutes.trim()!=="" && !Number.isNaN(Number(actualMinutes))){
       durationSeconds=Math.max(1,Math.round(Number(actualMinutes)*60));
+      reviewedAt=new Date().toISOString();
     }
   }
 
@@ -1070,7 +1113,8 @@ Le chrono a peut-être été oublié. Indique la durée réelle en minutes, ou v
     startedAt,
     endedAt,
     durationSeconds,
-    createdAt:new Date().toISOString()
+    createdAt:new Date().toISOString(),
+    reviewedAt
   });
 
   t.timeSpentSeconds = (Number(t.timeSpentSeconds)||0) + durationSeconds;
@@ -1236,7 +1280,7 @@ document.getElementById("loginForm").addEventListener("submit",async e=>{
 });
 document.getElementById("logoutBtn").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.reload();});
 
-window.openTask=openTask;window.openNewTask=openNewTask;window.moveTask=moveTask;window.setDashboardTab=setDashboardTab;window.setAdminTab=setAdminTab;window.openNewRecurring=openNewRecurring;window.editRecurring=editRecurring;window.createTaskFromRecurring=createTaskFromRecurring;window.openProjectWorkspace=openProjectWorkspace;window.setProjectTab=setProjectTab;window.editProject=editProject;window.openNewTaskForProject=openNewTaskForProject;window.removeChecklistEditorItem=removeChecklistEditorItem;window.openNewTaskForDate=openNewTaskForDate;window.changeCalendarMonth=changeCalendarMonth;window.toggleTimer=toggleTimer;window.editSession=editSession;window.setLegacyTime=setLegacyTime;window.deleteSession=deleteSession;window.addImprovement=addImprovement;window.dictateImprovement=dictateImprovement;window.updateImprovement=updateImprovement;window.deleteImprovement=deleteImprovement;window.openNewProject=openNewProject;window.openNewNote=openNewNote;window.openNote=openNote;window.renderInboxFiltered=renderInboxFiltered;
+window.openTask=openTask;window.openNewTask=openNewTask;window.moveTask=moveTask;window.setDashboardTab=setDashboardTab;window.setAdminTab=setAdminTab;window.setActivityTab=setActivityTab;window.openNewRecurring=openNewRecurring;window.editRecurring=editRecurring;window.createTaskFromRecurring=createTaskFromRecurring;window.openProjectWorkspace=openProjectWorkspace;window.setProjectTab=setProjectTab;window.editProject=editProject;window.openNewTaskForProject=openNewTaskForProject;window.removeChecklistEditorItem=removeChecklistEditorItem;window.openNewTaskForDate=openNewTaskForDate;window.changeCalendarMonth=changeCalendarMonth;window.toggleTimer=toggleTimer;window.editSession=editSession;window.setLegacyTime=setLegacyTime;window.deleteSession=deleteSession;window.addImprovement=addImprovement;window.dictateImprovement=dictateImprovement;window.updateImprovement=updateImprovement;window.deleteImprovement=deleteImprovement;window.openNewProject=openNewProject;window.openNewNote=openNewNote;window.openNote=openNote;window.renderInboxFiltered=renderInboxFiltered;
 window.saveJsonAs=saveJsonAs;window.downloadJson=downloadJson;window.openJsonFile=openJsonFile;window.openMergeJson=openMergeJson;window.exportClipboard=exportClipboard;window.resetAll=resetAll;window.seedDemo=seedDemo;
 
 setView(state.settings.currentView||"dashboard");
