@@ -2,6 +2,17 @@
 
 CaptureFlow réunit dans une seule application les tâches, projets, post-it, tâches récurrentes, améliorations et journaux d’activité professionnels et personnels.
 
+## Améliorations du suivi d’activité
+
+- Les cartes projet affichent une synthèse compacte : contexte, statut, progression, nombre de tâches, temps total et dernière activité.
+- La vue **Aujourd’hui** sépare les tâches **En cours**, **À faire aujourd’hui** et **En attente** sans dupliquer une même tâche.
+- Les listes de projets des formulaires suivent le contexte sélectionné et restent triées alphabétiquement.
+- Démarrer un chronomètre passe automatiquement la tâche en cours ; quitter ce statut ferme proprement la session active.
+- Le journal accepte une période et plusieurs projets, puis réutilise le même calcul pour l’écran, l’impression et le classeur Excel.
+- L’export Excel contient quatre feuilles : synthèse générale, détail par projet, détail des tâches et sessions d’activité.
+
+Aucune migration PostgreSQL n’est nécessaire. Le format JSON reste compatible avec les sauvegardes V7 et antérieures. Les temps historiques sans date exploitable restent conservés et visibles, mais sont signalés puis exclus des totaux lorsqu’un filtre de période est appliqué.
+
 ## Changements par rapport à la V5 locale
 
 - Interface et fonctions de la V5 conservées.
@@ -56,6 +67,8 @@ Les imports par fusion conservent les données déjà présentes. Les identifian
 ```bash
 npm install
 npm run check
+npm run lint
+npm run build
 npm test
 npm start
 ```
