@@ -2,7 +2,7 @@ const STORAGE_KEY = "captureflow_local_v1";
 
 const defaultState = {
   meta: { version: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
+  settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", todayTab: "doing", activityDateFrom: "", activityDateTo: "", activityProjectIds: [], calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
   projects: [],
   tasks: [],
   notes: [],
@@ -51,6 +51,7 @@ function normalizeState(parsed){
     recurringTasks:Array.isArray(parsed?.recurringTasks)?parsed.recurringTasks:[]
   };
   merged.meta.version=7;
+  if(!Array.isArray(merged.settings.activityProjectIds)) merged.settings.activityProjectIds=[];
   merged.tasks.forEach((t,i)=>{
     if(!Array.isArray(t.checklist)) t.checklist=[];
     if(t.remaining===undefined) t.remaining="";
@@ -168,7 +169,16 @@ async function initializeCloud(){
   }
 }
 
-const { priorityRank, priorityManualSort, isUnreviewedLegacyTask, isUnreviewedLongSession } = CaptureFlowLogic;
+const {
+  priorityRank,
+  priorityManualSort,
+  projectOptionsForContext,
+  statusAfterTimerStart,
+  shouldStopTimerForStatus,
+  sessionDurationSeconds,
+  buildActivityReport,
+  buildActivityWorkbook
+} = CaptureFlowLogic;
 function filtered(items){
   const c = state.settings.contextFilter;
   const p = state.settings.priorityFilter || "all";
@@ -288,21 +298,48 @@ function renderCurrent(){
 }
 function empty(msg){ return `<div class="empty">${esc(msg)}</div>`; }
 
+function setTodayTab(tab){
+  if(!["doing","today","waiting"].includes(tab))return;
+  state.settings.todayTab=tab;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderCurrent();
+}
 function renderToday(){
-  const tasks=manualTaskSort(filtered(state.tasks.filter(t=>t.status==="today" || (t.dueDate===todayISO() && t.status!=="done"))));
+  const scheduled=manualTaskSort(filtered(state.tasks.filter(t=>
+    t.status==="today" || (t.dueDate===todayISO() && !["doing","waiting","done"].includes(t.status))
+  )));
   const doing=sortTasks(filtered(state.tasks.filter(t=>t.status==="doing")));
-  const totalMin=[...tasks,...doing].reduce((s,t)=>s+(Number(t.estimate)||0),0);
+  const waiting=sortTasks(filtered(state.tasks.filter(t=>t.status==="waiting")));
+  const totalMin=[...scheduled,...doing,...waiting].reduce((sum,task)=>sum+(Number(task.estimate)||0),0);
+  const completedToday=filtered(state.tasks.filter(task=>
+    task.status==="done" && task.completedAt?.slice(0,10)===todayISO()
+  )).length;
+  const tab=["doing","today","waiting"].includes(state.settings.todayTab)
+    ? state.settings.todayTab
+    : "doing";
+  const tabButton=(key,label,count)=>`<button class="today-subtab ${tab===key?"active":""}" onclick="setTodayTab('${key}')"><span>${label}</span><strong>${count}</strong></button>`;
+  let body="";
+  if(tab==="doing"){
+    body=`<div class="section-title"><h3>En cours</h3></div><div class="task-list">${doing.length?doing.map(task=>taskCard(task)).join(""):empty("Aucune tâche en cours.")}</div>`;
+  }else if(tab==="waiting"){
+    body=`<div class="section-title"><h3>En attente</h3></div><div class="task-list">${waiting.length?waiting.map(task=>taskCard(task)).join(""):empty("Aucune tâche en attente.")}</div>`;
+  }else{
+    body=`<div class="section-title"><h3>À faire aujourd’hui</h3><button class="btn small secondary" onclick="openNewTask('today')">Ajouter</button></div>
+      <div class="task-list">${scheduled.length?scheduled.map(task=>`<div class="ordered-task"><div class="order-buttons"><button class="icon-btn" onclick="moveTask('${task.id}',-1,'today')">↑</button><button class="icon-btn" onclick="moveTask('${task.id}',1,'today')">↓</button></div>${taskCard(task)}</div>`).join(""):empty("Ta journée est vide. Ajoute une tâche ou déplace-en une depuis le puits.")}</div>`;
+  }
   document.getElementById("todayView").innerHTML=`
     <div class="grid stats-grid">
-      <div class="card"><div class="muted">À faire</div><div class="stat-value">${tasks.length}</div></div>
+      <div class="card"><div class="muted">À faire</div><div class="stat-value">${scheduled.length}</div></div>
       <div class="card"><div class="muted">En cours</div><div class="stat-value">${doing.length}</div></div>
       <div class="card"><div class="muted">Temps prévu</div><div class="stat-value">${Math.floor(totalMin/60)}h${String(totalMin%60).padStart(2,"0")}</div></div>
-      <div class="card"><div class="muted">Terminées aujourd’hui</div><div class="stat-value">${filtered(state.tasks.filter(t=>t.status==="done" && t.completedAt?.slice(0,10)===todayISO())).length}</div></div>
+      <div class="card"><div class="muted">Terminées aujourd’hui</div><div class="stat-value">${completedToday}</div></div>
     </div>
-    <div class="section-title"><h3>En cours</h3></div>
-    <div class="task-list">${doing.length?doing.map(t=>taskCard(t)).join(""):empty("Aucune tâche en cours.")}</div>
-    <div class="section-title"><h3>À faire aujourd’hui</h3><button class="btn small secondary" onclick="openNewTask('today')">Ajouter</button></div>
-    <div class="task-list">${tasks.length?tasks.map(t=>`<div class="ordered-task"><div class="order-buttons"><button class="icon-btn" onclick="moveTask('${t.id}',-1,'today')">↑</button><button class="icon-btn" onclick="moveTask('${t.id}',1,'today')">↓</button></div>${taskCard(t)}</div>`).join(""):empty("Ta journée est vide. Ajoute une tâche ou déplace-en une depuis la corbeille.")}</div>`;
+    <div class="today-subtabs" role="tablist" aria-label="Sous-vues Aujourd’hui">
+      ${tabButton("doing","En cours",doing.length)}
+      ${tabButton("today","À faire aujourd’hui",scheduled.length)}
+      ${tabButton("waiting","En attente",waiting.length)}
+    </div>
+    <div class="today-tab-body">${body}</div>`;
   bindDrag();
 }
 
@@ -370,7 +407,7 @@ function renderKanban(){
 }
 
 function renderProjects(){
-  const projects=filtered(state.projects);
+  const projects=[...filtered(state.projects)].sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr",{sensitivity:"base"}));
   document.getElementById("projectsView").innerHTML=`
     <div class="section-title"><h3>${projects.length} projet(s)</h3><button class="btn primary" onclick="openNewProject()">+ Nouveau projet</button></div>
     <div class="grid project-grid">${projects.length?projects.map(p=>{
@@ -378,7 +415,8 @@ function renderProjects(){
       const done=tasks.filter(t=>t.status==="done").length;
       const pct=tasks.length?Math.round(done/tasks.length*100):0;
       const sessions=projectSessions(p.id), tracked=sessionTotal(sessions)+tasks.reduce((sum,t)=>sum+legacySeconds(t),0), range=sessionRange(sessions);
-      return `<article class="card project-card project-workspace-card" onclick="openProjectWorkspace('${p.id}')">
+      const lastActivity=range.last||p.updatedAt||"";
+      return `<article class="card project-card project-card-compact project-workspace-card" onclick="openProjectWorkspace('${p.id}')">
         <div class="project-card-head">
           <div>
             <h3>${esc(p.name)}</h3>
@@ -386,15 +424,13 @@ function renderProjects(){
           </div>
           <button class="icon-btn project-edit-btn" onclick="event.stopPropagation();editProject('${p.id}')" title="Modifier le projet">✏️</button>
         </div>
-        <p class="muted">${esc(p.description||"Aucune description")}</p>
         <div class="progress"><span style="width:${pct}%"></span></div>
-        <p class="muted">${done}/${tasks.length} tâches terminées · ${pct}%</p>
-        <div class="task-meta">
-          <span class="badge">${sessions.length} session(s)</span>
-          <span class="badge">${formatDurationLong(tracked)}</span>
-          ${range.first?`<span class="badge">${fmtDateTime(range.first)} → ${fmtDateTime(range.last)}</span>`:""}
-          ${p.dueDate?`<span class="badge">Cible : ${fmtDate(p.dueDate)}</span>`:""}
+        <div class="project-card-metrics">
+          <span><strong>${pct}%</strong><small>progression</small></span>
+          <span><strong>${tasks.length}</strong><small>tâche${tasks.length>1?"s":""}</small></span>
+          <span><strong>${formatDurationLong(tracked)}</strong><small>temps total</small></span>
         </div>
+        ${lastActivity?`<p class="project-last-activity">Dernière activité · ${fmtDateTime(lastActivity)}</p>`:""}
       </article>`;
     }).join(""):empty("Aucun projet.")}</div>`;
 }
@@ -496,18 +532,37 @@ function renderProjectDetail(){
   bindDrag();
 }
 function openNewTaskForProject(projectId){
+  const project=state.projects.find(item=>item.id===projectId);
   openNewTask("today");
-  document.getElementById("taskProject").value=projectId;
+  if(project){
+    document.getElementById("taskContext").value=project.context;
+    populateProjectSelect(projectId,project.context);
+  }
 }
 
-function recurringProjectOptions(selected=""){
-  return `<option value="">Aucun projet</option>`+state.projects.map(p=>`<option value="${p.id}" ${p.id===selected?"selected":""}>${esc(p.name)}</option>`).join("");
+function preferredCreationContext(){
+  return state.settings.contextFilter==="perso"?"perso":"pro";
+}
+function contextualProjectOptions(context,selected="",preserveMismatch=false){
+  const projects=projectOptionsForContext(state.projects,context);
+  const current=state.projects.find(project=>project.id===selected);
+  const mismatch=preserveMismatch&&current&&!projects.some(project=>project.id===selected);
+  return `<option value="">Aucun projet</option>`+
+    (mismatch?`<option value="${current.id}" selected>${esc(current.name)} — contexte différent</option>`:"")+
+    projects.map(project=>`<option value="${project.id}" ${project.id===selected?"selected":""}>${esc(project.name)}</option>`).join("");
+}
+function recurringProjectOptions(selected="",context=document.getElementById("recurringContext").value,preserveMismatch=false){
+  return contextualProjectOptions(context,selected,preserveMismatch);
+}
+function refreshRecurringProjects(){
+  document.getElementById("recurringProject").innerHTML=recurringProjectOptions("",document.getElementById("recurringContext").value);
 }
 function openNewRecurring(){
   document.getElementById("recurringForm").reset();
   document.getElementById("recurringId").value="";
   document.getElementById("recurringDialogTitle").textContent="Nouvelle tâche récurrente";
-  document.getElementById("recurringProject").innerHTML=recurringProjectOptions("");
+  document.getElementById("recurringContext").value=preferredCreationContext();
+  document.getElementById("recurringProject").innerHTML=recurringProjectOptions("",document.getElementById("recurringContext").value);
   document.getElementById("deleteRecurringBtn").classList.add("hidden");
   document.getElementById("recurringDialog").showModal();
 }
@@ -517,7 +572,7 @@ function editRecurring(id){
   document.getElementById("recurringDialogTitle").textContent="Modifier la tâche récurrente";
   document.getElementById("recurringTitle").value=r.title;
   document.getElementById("recurringContext").value=r.context;
-  document.getElementById("recurringProject").innerHTML=recurringProjectOptions(r.projectId||"");
+  document.getElementById("recurringProject").innerHTML=recurringProjectOptions(r.projectId||"",r.context,true);
   document.getElementById("recurringFrequency").value=r.frequency;
   document.getElementById("recurringWeekday").value=String(r.weekday??1);
   document.getElementById("recurringEstimate").value=r.estimate||0;
@@ -528,11 +583,17 @@ function editRecurring(id){
 function saveRecurringFromForm(){
   const id=document.getElementById("recurringId").value;
   const existing=state.recurringTasks.find(x=>x.id===id);
+  const context=document.getElementById("recurringContext").value;
+  const selectedProjectId=document.getElementById("recurringProject").value||null;
+  const selectedProject=state.projects.find(project=>project.id===selectedProjectId);
+  const projectId=selectedProject&&(
+    selectedProject.context===context || selectedProject.id===existing?.projectId
+  )?selectedProject.id:null;
   const data={
     id:id||uid("recurring"),
     title:document.getElementById("recurringTitle").value.trim(),
-    context:document.getElementById("recurringContext").value,
-    projectId:document.getElementById("recurringProject").value||null,
+    context,
+    projectId,
     frequency:document.getElementById("recurringFrequency").value,
     weekday:Number(document.getElementById("recurringWeekday").value),
     estimate:Number(document.getElementById("recurringEstimate").value)||0,
@@ -649,39 +710,70 @@ function setActivityTab(tab){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   renderCurrent();
 }
+function setActivityDateFilter(key,value){
+  if(key==="from")state.settings.activityDateFrom=value;
+  if(key==="to")state.settings.activityDateTo=value;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderCurrent();
+}
+function setActivityProjects(projectIds){
+  state.settings.activityProjectIds=Array.isArray(projectIds)?projectIds:[];
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderCurrent();
+}
+function clearActivityFilters(){
+  state.settings.activityDateFrom="";
+  state.settings.activityDateTo="";
+  state.settings.activityProjectIds=[];
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderCurrent();
+}
+function activityReport(){
+  return buildActivityReport(state,{
+    context:state.settings.contextFilter||"all",
+    priority:state.settings.priorityFilter||"all",
+    from:state.settings.activityDateFrom||"",
+    to:state.settings.activityDateTo||"",
+    projectIds:state.settings.activityProjectIds||[]
+  });
+}
+function activityProjectOptions(){
+  const context=state.settings.contextFilter;
+  const projects=context==="all"
+    ? [...state.projects].sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr",{sensitivity:"base"}))
+    : projectOptionsForContext(state.projects,context);
+  const selected=state.settings.activityProjectIds||[];
+  return `<option value="__none__" ${selected.includes("__none__")?"selected":""}>Sans projet</option>`+
+    projects.map(project=>`<option value="${project.id}" ${selected.includes(project.id)?"selected":""}>${esc(project.name)}</option>`).join("");
+}
 function activityTaskTable(rows, emptyMessage="Aucune activité tâche enregistrée."){
   if(!rows.length)return empty(emptyMessage);
-  return `<div class="card table-wrap"><table class="table"><thead><tr><th>Tâche</th><th>Projet</th><th>Sessions</th><th>Temps total</th><th>Première</th><th>Dernière</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.project)}</td><td>${x.sessions}</td><td><strong>${formatDurationLong(x.total)}</strong></td><td>${x.first?fmtDateTime(x.first):"—"}</td><td>${x.last?fmtDateTime(x.last):"—"}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="card table-wrap"><table class="table"><thead><tr><th>Tâche</th><th>Projet</th><th>Sessions</th><th>Temps total</th><th>Première</th><th>Dernière</th></tr></thead><tbody>${rows.map(row=>`<tr ${row.id&&state.tasks.some(task=>task.id===row.id)?`class="clickable-row" onclick="openTask('${row.id}')"`:""}><td>${esc(row.name)}</td><td>${esc(row.project)}</td><td>${row.sessions}</td><td><strong>${formatDurationLong(row.total)}</strong></td><td>${row.first?fmtDateTime(row.first):"—"}</td><td>${row.last?fmtDateTime(row.last):"—"}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function renderActivity(){
-  const sessions=[...activityContextSessions()].sort((a,b)=>(b.startedAt||"").localeCompare(a.startedAt||""));
-  const contextTasks=activityContextTasks();
-  const total=sessionTotal(sessions)+contextTasks.reduce((sum,t)=>sum+legacySeconds(t),0), range=sessionRange(sessions);
-  const taskIds=[...new Set([...sessions.map(s=>s.taskId).filter(Boolean),...contextTasks.filter(t=>legacySeconds(t)>0).map(t=>t.id)])];
-
-  const taskRows=taskIds.map(id=>{
-    const t=state.tasks.find(x=>x.id===id);
-    const ss=sessions.filter(s=>s.taskId===id), r=sessionRange(ss);
-    const projectId=t?.projectId||ss.find(s=>s.projectId)?.projectId||null;
-    return {id,name:t?.title||"Tâche supprimée",projectId,project:projectId?projectName(projectId):"—",sessions:ss.length,total:(t?legacySeconds(t):0)+sessionTotal(ss),first:r.first,last:r.last};
-  }).sort((a,b)=>b.total-a.total);
-
-  const projectRows=filtered(state.projects).map(p=>{
-    const ss=sessions.filter(s=>s.projectId===p.id), r=sessionRange(ss);
-    const attachedTasks=state.tasks.filter(t=>t.projectId===p.id && (state.settings.contextFilter==="all"||t.context===state.settings.contextFilter));
-    const legacy=attachedTasks.reduce((sum,t)=>sum+legacySeconds(t),0);
-    return {id:p.id,name:p.name,tasks:attachedTasks.length,sessions:ss.length,total:legacy+sessionTotal(ss),first:r.first,last:r.last};
-  }).filter(x=>x.total>0||x.sessions>0).sort((a,b)=>b.total-a.total);
-
-  const running=state.tasks.filter(t=>t.timerStartedAt && (state.settings.contextFilter==="all"||t.context===state.settings.contextFilter));
-  const legacyTasks=contextTasks.filter(isUnreviewedLegacyTask);
-  const longSessions=sessions.filter(isUnreviewedLongSession);
+  const report=activityReport();
+  const sessions=[...report.sessions].sort((a,b)=>(b.startedAt||"").localeCompare(a.startedAt||""));
+  const range=sessionRange(sessions);
+  const taskRows=report.tracedTasks.map(task=>({
+    id:task.id,
+    name:task.title,
+    projectId:task.projectId==="__none__"?null:task.projectId,
+    project:task.project,
+    sessions:task.sessionCount,
+    total:task.totalSeconds,
+    first:task.firstActivityAt,
+    last:task.lastActivityAt
+  })).sort((a,b)=>b.total-a.total);
+  const projectRows=report.projects.filter(project=>project.id!=="__none__"&&(project.totalSeconds>0||project.sessionCount>0));
+  const running=state.tasks.filter(task=>task.timerStartedAt&&report.filteredTaskIds.has(task.id));
+  const legacyTasks=report.unreviewedLegacyTasks;
+  const longSessions=report.unreviewedLongSessions;
   const correctionCount=legacyTasks.length+longSessions.length;
   const tab=state.settings.activityTab||"summary";
   const tabButton=(key,label,count="")=>`<button class="activity-tab ${tab===key?"active":""}" onclick="setActivityTab('${key}')">${label}${count!==""?` <span>${count}</span>`:""}</button>`;
   const projectGroups=projectRows.map(project=>{
     const rows=taskRows.filter(task=>task.projectId===project.id);
-    return `<details class="activity-group"><summary><span><strong>${esc(project.name)}</strong><small>${project.tasks} tâche(s) · ${project.sessions} session(s)</small></span><strong>${formatDurationLong(project.total)}</strong></summary>${activityTaskTable(rows,"Aucune tâche chronométrée dans ce projet.")}</details>`;
+    return `<details class="activity-group"><summary><span><strong>${esc(project.name)}</strong><small>${project.taskCount} tâche(s) · ${project.sessionCount} session(s)</small></span><span class="activity-group-actions"><strong>${formatDurationLong(project.totalSeconds)}</strong><button class="btn small secondary" onclick="event.preventDefault();event.stopPropagation();openProjectWorkspace('${project.id}','activity')">Ouvrir</button></span></summary>${activityTaskTable(rows,"Aucune tâche chronométrée dans ce projet.")}</details>`;
   }).join("");
   const withoutProject=taskRows.filter(task=>!task.projectId);
   let body="";
@@ -690,10 +782,9 @@ function renderActivity(){
   }else if(tab==="withoutProject"){
     body=activityTaskTable(withoutProject,"Aucune activité sans projet.");
   }else if(tab==="sessions"){
-    body=`<div class="card table-wrap">${sessions.length?`<table class="table"><thead><tr><th>Début</th><th>Fin</th><th>Tâche</th><th>Projet</th><th>Durée</th><th>Correction</th></tr></thead><tbody>${sessions.map(s=>{
-      const t=state.tasks.find(x=>x.id===s.taskId), p=state.projects.find(x=>x.id===s.projectId);
-      const warning=isUnreviewedLongSession(s);
-      return `<tr class="${warning?"session-warning":""}"><td>${fmtDateTime(s.startedAt)}</td><td>${fmtDateTime(s.endedAt)}</td><td>${esc(t?.title||"Tâche supprimée")}</td><td>${esc(p?.name||"—")}</td><td><strong>${formatDurationLong(s.durationSeconds)}</strong>${warning?" ⚠":""}</td><td><button class="btn small secondary" onclick="editSession('${s.id}')">Corriger</button> <button class="btn small danger" onclick="deleteSession('${s.id}')">Supprimer</button></td></tr>`;
+    body=`<div class="card table-wrap">${sessions.length?`<table class="table"><thead><tr><th>Début</th><th>Fin</th><th>Tâche</th><th>Projet</th><th>Durée</th><th>Correction</th></tr></thead><tbody>${sessions.map(session=>{
+      const warning=longSessions.some(item=>item.id===session.id);
+      return `<tr class="${warning?"session-warning":""}"><td>${fmtDateTime(session.startedAt)}</td><td>${fmtDateTime(session.endedAt)}</td><td>${esc(session.task)}</td><td>${esc(session.project)}</td><td><strong>${formatDurationLong(session.durationSeconds)}</strong>${warning?" ⚠":""}</td><td><button class="btn small secondary" onclick="editSession('${session.id}')">Corriger</button> <button class="btn small danger" onclick="deleteSession('${session.id}')">Supprimer</button></td></tr>`;
     }).join("")}</tbody></table>`:empty("Aucune session enregistrée.")}</div>`;
   }else if(tab==="corrections"){
     body=`${legacyTasks.length?`<div class="card correction-list"><h3>Temps anciens sans détail</h3>${legacyTasks.map(t=>`<div><span>${esc(t.title)} : <strong>${formatDurationLong(legacySeconds(t))}</strong></span><button class="btn small secondary" onclick="setLegacyTime('${t.id}')">Corriger et valider</button></div>`).join("")}</div>`:""}
@@ -701,21 +792,30 @@ function renderActivity(){
       ${!correctionCount?empty("Aucun temps à corriger."):""}`;
   }else{
     body=`<div class="grid activity-overview-grid">
-      <div class="card"><h3>Projets actifs</h3>${projectRows.slice(0,5).map(x=>`<div class="activity-ranking"><span>${esc(x.name)}</span><strong>${formatDurationLong(x.total)}</strong></div>`).join("")||`<p class="muted">Aucune activité projet.</p>`}</div>
+      <div class="card"><h3>Projets actifs</h3>${projectRows.slice(0,5).map(project=>`<button class="activity-ranking activity-ranking-link" onclick="openProjectWorkspace('${project.id}','activity')"><span>${esc(project.name)}</span><strong>${formatDurationLong(project.totalSeconds)}</strong></button>`).join("")||`<p class="muted">Aucune activité projet.</p>`}</div>
       <div class="card"><h3>Tâches les plus suivies</h3>${taskRows.slice(0,5).map(x=>`<div class="activity-ranking"><span>${esc(x.name)}</span><strong>${formatDurationLong(x.total)}</strong></div>`).join("")||`<p class="muted">Aucune activité tâche.</p>`}</div>
     </div>`;
   }
 
   document.getElementById("activityView").innerHTML=`
+    <div class="card activity-filter-card">
+      <div class="activity-filter-grid">
+        <label>Du<input type="date" value="${esc(report.filters.from)}" onchange="setActivityDateFilter('from',this.value)"></label>
+        <label>Au<input type="date" value="${esc(report.filters.to)}" onchange="setActivityDateFilter('to',this.value)"></label>
+        <label>Projets <small>Aucune sélection = tous</small><select multiple size="4" onchange="setActivityProjects([...this.selectedOptions].map(option=>option.value))">${activityProjectOptions()}</select></label>
+        <div class="activity-filter-actions"><button class="btn secondary" onclick="clearActivityFilters()">Réinitialiser</button><button class="btn primary" onclick="exportActivityExcel()">Exporter Excel</button><button class="btn secondary" onclick="printActivitySummary()">Imprimer la synthèse</button><span id="activityExportStatus" class="muted" role="status" aria-live="polite"></span></div>
+      </div>
+      ${report.hasDateFilter&&report.general.totalLegacyValidatedSeconds?`<p class="filter-note">${formatDurationLong(report.general.totalLegacyValidatedSeconds)} de temps historique validé restent visibles mais sont exclus des totaux de cette période faute de date fiable.</p>`:""}
+    </div>
     ${running.length?`<div class="warning-box"><strong>Chronomètre actif :</strong> ${running.map(t=>`${esc(t.title)} — ${formatDurationLong(elapsedSeconds(t))}${elapsedSeconds(t)>14400?" ⚠ durée à vérifier":""}`).join("<br>")}</div>`:""}
     ${correctionCount?`<button class="warning-box warning-button" onclick="setActivityTab('corrections')"><strong>${correctionCount} temps à corriger</strong> · Ouvrir la liste</button>`:""}
     <div class="grid stats-grid">
-      <div class="card"><div class="muted">Temps enregistré</div><div class="stat-value">${formatDurationLong(total)}</div></div>
-      <div class="card"><div class="muted">Sessions</div><div class="stat-value">${sessions.length}</div></div>
-      <div class="card"><div class="muted">Tâches tracées</div><div class="stat-value">${taskIds.length}</div></div>
+      <div class="card"><div class="muted">Temps enregistré</div><div class="stat-value">${formatDurationLong(report.general.totalSeconds)}</div></div>
+      <div class="card"><div class="muted">Sessions</div><div class="stat-value">${report.general.sessionCount}</div></div>
+      <div class="card"><div class="muted">Tâches tracées</div><div class="stat-value">${taskRows.length}</div></div>
       <div class="card"><div class="muted">Période</div><div class="stat-small">${range.first?`${fmtDateTime(range.first)}<br>→ ${fmtDateTime(range.last)}`:"Aucune session"}</div></div>
     </div>
-    <div class="activity-tabs">${tabButton("summary","Synthèse")}${tabButton("projects","Par projet",projectRows.length)}${tabButton("withoutProject","Sans projet",withoutProject.length)}${tabButton("sessions","Détail des sessions",sessions.length)}${tabButton("corrections","À corriger",correctionCount)}</div>
+    <div class="activity-tabs">${tabButton("summary","Synthèse")}${tabButton("projects","Par projet",projectRows.length)}${tabButton("withoutProject","Sans projet",withoutProject.length)}${tabButton("sessions","Détail des sessions",report.general.sessionCount)}${tabButton("corrections","À corriger",correctionCount)}</div>
     <div class="activity-tab-body">${body}</div>`;
 }
 
@@ -948,9 +1048,12 @@ function removeChecklistEditorItem(index){
   renderChecklistEditor(items);
 }
 
-function populateProjectSelect(selected=""){
+function populateProjectSelect(selected="",context=document.getElementById("taskContext").value,preserveMismatch=false){
   const sel=document.getElementById("taskProject");
-  sel.innerHTML=`<option value="">Aucun projet</option>`+state.projects.map(p=>`<option value="${p.id}" ${p.id===selected?"selected":""}>${esc(p.name)}</option>`).join("");
+  sel.innerHTML=contextualProjectOptions(context,selected,preserveMismatch);
+}
+function refreshTaskProjects(){
+  populateProjectSelect("",document.getElementById("taskContext").value);
 }
 function openNewTask(status="inbox"){
   document.getElementById("taskForm").reset();
@@ -959,10 +1062,11 @@ function openNewTask(status="inbox"){
   document.getElementById("taskDialogTitle").textContent="Nouvelle tâche";
   document.getElementById("taskStatus").value=status;
   document.getElementById("taskEstimate").value=30;
+  document.getElementById("taskContext").value=preferredCreationContext();
   document.getElementById("deleteTaskBtn").classList.add("hidden");
   renderChecklistEditor([]);
   document.getElementById("taskActivitySummary").classList.add("hidden");
-  populateProjectSelect();
+  populateProjectSelect("",document.getElementById("taskContext").value);
   document.getElementById("taskDialog").showModal();
   setTimeout(()=>document.getElementById("taskTitle").focus(),50);
 }
@@ -974,7 +1078,7 @@ function openTask(id){
   document.getElementById("taskDescription").value=t.description||"";
   document.getElementById("taskRemaining").value=t.remaining||"";
   document.getElementById("taskContext").value=t.context;
-  populateProjectSelect(t.projectId||"");
+  populateProjectSelect(t.projectId||"",t.context,true);
   document.getElementById("taskStatus").value=t.status;
   document.getElementById("taskPriority").value=t.priority;
   document.getElementById("taskDueDate").value=t.dueDate||"";
@@ -992,13 +1096,19 @@ function saveTaskFromForm(){
   const id=document.getElementById("taskId").value;
   const existing=state.tasks.find(x=>x.id===id);
   const status=document.getElementById("taskStatus").value;
+  const context=document.getElementById("taskContext").value;
+  const selectedProjectId=document.getElementById("taskProject").value||null;
+  const selectedProject=state.projects.find(project=>project.id===selectedProjectId);
+  const projectId=selectedProject&&(
+    selectedProject.context===context || selectedProject.id===existing?.projectId
+  )?selectedProject.id:null;
   const data={
     id:id||uid("task"),
     title:document.getElementById("taskTitle").value.trim(),
     description:document.getElementById("taskDescription").value.trim(),
     remaining:document.getElementById("taskRemaining").value.trim(),
-    context:document.getElementById("taskContext").value,
-    projectId:document.getElementById("taskProject").value||null,
+    context,
+    projectId,
     status,
     priority:document.getElementById("taskPriority").value,
     dueDate:document.getElementById("taskDueDate").value||null,
@@ -1012,9 +1122,9 @@ function saveTaskFromForm(){
     timeSpentSeconds:existing?.timeSpentSeconds||0,
     legacyTimeSeconds:existing?.legacyTimeSeconds||0,
     legacyTimeReviewed:existing?.legacyTimeReviewed||false,
-    timerStartedAt:status==="done"?null:(existing?.timerStartedAt||null)
+    timerStartedAt:status==="doing"?(existing?.timerStartedAt||null):null
   };
-  if(status==="done" && existing?.timerStartedAt){
+  if(shouldStopTimerForStatus(status) && existing?.timerStartedAt){
     stopTimer(existing);
     data.timeSpentSeconds = existing.timeSpentSeconds;
     data.timerStartedAt = null;
@@ -1033,6 +1143,7 @@ function openNewProject(){
   document.getElementById("projectForm").reset();
   document.getElementById("projectId").value="";
   document.getElementById("projectDialogTitle").textContent="Nouveau projet";
+  document.getElementById("projectContext").value=preferredCreationContext();
   document.getElementById("deleteProjectBtn").classList.add("hidden");
   document.getElementById("projectDialog").showModal();
 }
@@ -1090,7 +1201,7 @@ function stopTimer(t){
   if(!t?.timerStartedAt) return;
   const startedAt=t.timerStartedAt;
   const endedAt=new Date().toISOString();
-  let durationSeconds=Math.max(1,Math.floor((new Date(endedAt)-new Date(startedAt))/1000));
+  let durationSeconds=sessionDurationSeconds(startedAt,endedAt);
   let reviewedAt=null;
 
   if(durationSeconds > 14400){
@@ -1129,7 +1240,8 @@ function toggleTimer(id){
   }else{
     state.tasks.forEach(other=>{ if(other.id!==id && other.timerStartedAt) stopTimer(other); });
     t.timerStartedAt=new Date().toISOString();
-    if(t.status==="inbox"||t.status==="today") t.status="doing";
+    t.status=statusAfterTimerStart(t.status);
+    t.completedAt=null;
     t.updatedAt=new Date().toISOString();
   }
   saveState();
@@ -1146,6 +1258,7 @@ function bindDrag(){
       e.preventDefault();zone.classList.remove("drag-over");
       const id=e.dataTransfer.getData("text/plain"),t=state.tasks.find(x=>x.id===id);
       if(t){
+        if(t.timerStartedAt && shouldStopTimerForStatus(zone.dataset.status)) stopTimer(t);
         t.status=zone.dataset.status;
         if(zone.dataset.projectId) t.projectId=zone.dataset.projectId;
         t.updatedAt=new Date().toISOString();
@@ -1155,6 +1268,49 @@ function bindDrag(){
     });
   });
 }
+
+async function exportActivityExcel(){
+  const status=document.getElementById("activityExportStatus");
+  if(status) status.textContent="Préparation de l’export…";
+  try{
+    const report=activityReport();
+    const workbook=buildActivityWorkbook(globalThis.ExcelJS,report);
+    const buffer=await workbook.xlsx.writeBuffer();
+    const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const link=document.createElement("a");
+    const context=report.filters.context==="pro"?"professionnel":report.filters.context==="perso"?"personnel":"tous-contextes";
+    const period=report.filters.from||report.filters.to
+      ? `${report.filters.from||"debut"}-${report.filters.to||"fin"}`
+      : todayISO();
+    link.href=URL.createObjectURL(blob);
+    link.download=`captureflow-activite-${context}-${period}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    if(status) status.textContent="Export Excel prêt.";
+  }catch(error){
+    console.error(error);
+    if(status) status.textContent="Échec de l’export Excel.";
+    alert("Export Excel impossible : "+error.message);
+  }
+}
+function printActivitySummary(){
+  const report=activityReport();
+  const context=report.filters.context==="pro"?"Professionnel":report.filters.context==="perso"?"Personnel":"Tous les contextes";
+  const period=report.filters.from||report.filters.to
+    ? `${report.filters.from?fmtDate(report.filters.from):"Début"} → ${report.filters.to?fmtDate(report.filters.to):"Aujourd’hui"}`
+    : "Toutes les dates";
+  const projects=report.projects.map(project=>`<tr><td>${esc(project.name)}</td><td>${project.progressPercent}%</td><td>${project.doneTasks}/${project.taskCount}</td><td>${project.sessionCount}</td><td>${formatDurationLong(project.totalSeconds)}</td><td>${project.lastActivityAt?fmtDateTime(project.lastActivityAt):"—"}</td></tr>`).join("");
+  const target=document.getElementById("printReport");
+  target.innerHTML=`<header><p>CaptureFlow</p><h1>Synthèse du suivi d’activité</h1><div>${esc(context)} · ${esc(period)} · édité le ${new Date().toLocaleString("fr-FR")}</div></header>
+    <div class="print-stats"><div><strong>${report.general.projectCount}</strong><span>projets</span></div><div><strong>${report.general.taskCount}</strong><span>tâches</span></div><div><strong>${report.general.doneTasks}</strong><span>terminées</span></div><div><strong>${report.general.sessionCount}</strong><span>sessions</span></div><div><strong>${formatDurationLong(report.general.totalSeconds)}</strong><span>temps retenu</span></div></div>
+    ${report.hasDateFilter&&report.general.totalLegacyValidatedSeconds?`<p class="print-note">Temps historique validé sans date exclu de la période : ${formatDurationLong(report.general.totalLegacyValidatedSeconds)}.</p>`:""}
+    <table><thead><tr><th>Projet</th><th>Avancement</th><th>Tâches</th><th>Sessions</th><th>Temps</th><th>Dernière activité</th></tr></thead><tbody>${projects||`<tr><td colspan="6">Aucune donnée pour ces filtres.</td></tr>`}</tbody></table>`;
+  document.body.classList.add("printing-activity");
+  requestAnimationFrame(()=>window.print());
+}
+if(typeof window!=="undefined")window.addEventListener("afterprint",()=>document.body.classList.remove("printing-activity"));
 
 async function saveJsonAs(){
   const content=JSON.stringify(state,null,2);
@@ -1244,7 +1400,7 @@ function quickVoiceTask(){
 
 document.querySelectorAll(".nav-btn").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
 document.getElementById("contextFilter").value=state.settings.contextFilter||"all";
-document.getElementById("contextFilter").addEventListener("change",e=>{state.settings.contextFilter=e.target.value;saveState()});
+document.getElementById("contextFilter").addEventListener("change",e=>{state.settings.contextFilter=e.target.value;state.settings.activityProjectIds=[];saveState()});
 document.getElementById("priorityFilter").value=state.settings.priorityFilter||"all";
 document.getElementById("priorityFilter").addEventListener("change",e=>{state.settings.priorityFilter=e.target.value;saveState()});
 document.getElementById("quickAddBtn").addEventListener("click",()=>openNewTask("inbox"));
@@ -1264,6 +1420,8 @@ document.getElementById("voiceDescriptionBtn").addEventListener("click",()=>dict
 document.getElementById("voiceRemainingBtn").addEventListener("click",()=>dictateInto("taskRemaining",true));
 document.getElementById("voiceNoteBtn").addEventListener("click",()=>dictateInto("noteContent",true));
 document.getElementById("addChecklistItemBtn").addEventListener("click",addChecklistEditorItem);
+document.getElementById("taskContext").addEventListener("change",refreshTaskProjects);
+document.getElementById("recurringContext").addEventListener("change",refreshRecurringProjects);
 document.getElementById("jsonFileInput").addEventListener("change",async e=>{const f=e.target.files[0];if(f)await importJsonText(await f.text());e.target.value=""});
 document.getElementById("mergeJsonFileInput").addEventListener("change",async e=>{const f=e.target.files[0],context=e.target.dataset.context;if(f)await importJsonText(await f.text(),"merge",context);e.target.value=""});
 
@@ -1281,8 +1439,8 @@ document.getElementById("loginForm").addEventListener("submit",async e=>{
 });
 document.getElementById("logoutBtn").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.reload();});
 
-window.openTask=openTask;window.openNewTask=openNewTask;window.moveTask=moveTask;window.setDashboardTab=setDashboardTab;window.setAdminTab=setAdminTab;window.setActivityTab=setActivityTab;window.openNewRecurring=openNewRecurring;window.editRecurring=editRecurring;window.createTaskFromRecurring=createTaskFromRecurring;window.openProjectWorkspace=openProjectWorkspace;window.setProjectTab=setProjectTab;window.editProject=editProject;window.openNewTaskForProject=openNewTaskForProject;window.removeChecklistEditorItem=removeChecklistEditorItem;window.openNewTaskForDate=openNewTaskForDate;window.changeCalendarMonth=changeCalendarMonth;window.toggleTimer=toggleTimer;window.editSession=editSession;window.setLegacyTime=setLegacyTime;window.deleteSession=deleteSession;window.addImprovement=addImprovement;window.dictateImprovement=dictateImprovement;window.updateImprovement=updateImprovement;window.deleteImprovement=deleteImprovement;window.openNewProject=openNewProject;window.openNewNote=openNewNote;window.openNote=openNote;window.renderInboxFiltered=renderInboxFiltered;
-window.saveJsonAs=saveJsonAs;window.downloadJson=downloadJson;window.openJsonFile=openJsonFile;window.openMergeJson=openMergeJson;window.exportClipboard=exportClipboard;window.resetAll=resetAll;window.seedDemo=seedDemo;
+window.openTask=openTask;window.openNewTask=openNewTask;window.moveTask=moveTask;window.setDashboardTab=setDashboardTab;window.setAdminTab=setAdminTab;window.setActivityTab=setActivityTab;window.setTodayTab=setTodayTab;window.setActivityDateFilter=setActivityDateFilter;window.setActivityProjects=setActivityProjects;window.clearActivityFilters=clearActivityFilters;window.openNewRecurring=openNewRecurring;window.editRecurring=editRecurring;window.createTaskFromRecurring=createTaskFromRecurring;window.openProjectWorkspace=openProjectWorkspace;window.setProjectTab=setProjectTab;window.editProject=editProject;window.openNewTaskForProject=openNewTaskForProject;window.removeChecklistEditorItem=removeChecklistEditorItem;window.openNewTaskForDate=openNewTaskForDate;window.changeCalendarMonth=changeCalendarMonth;window.toggleTimer=toggleTimer;window.editSession=editSession;window.setLegacyTime=setLegacyTime;window.deleteSession=deleteSession;window.addImprovement=addImprovement;window.dictateImprovement=dictateImprovement;window.updateImprovement=updateImprovement;window.deleteImprovement=deleteImprovement;window.openNewProject=openNewProject;window.openNewNote=openNewNote;window.openNote=openNote;window.renderInboxFiltered=renderInboxFiltered;
+window.saveJsonAs=saveJsonAs;window.downloadJson=downloadJson;window.openJsonFile=openJsonFile;window.openMergeJson=openMergeJson;window.exportClipboard=exportClipboard;window.exportActivityExcel=exportActivityExcel;window.printActivitySummary=printActivitySummary;window.resetAll=resetAll;window.seedDemo=seedDemo;
 
 setView(state.settings.currentView||"dashboard");
 initializeCloud();

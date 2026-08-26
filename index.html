@@ -24,6 +24,8 @@
       <button id="loginButton" class="btn primary" type="submit">Se connecter</button>
     </form>
   </div>
+
+  <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="app">
     <aside class="sidebar">
       <div class="brand">
@@ -316,6 +318,7 @@
 
   <input type="file" id="jsonFileInput" accept=".json,application/json" hidden />
   <input type="file" id="mergeJsonFileInput" accept=".json,application/json" hidden />
+  <script src="/vendor/exceljs.min.js"></script>
   <script src="logic.js"></script>
   <script src="app.js"></script>
 </body>

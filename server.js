@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
 const { Pool } = require("pg");
+const EXCELJS_BROWSER_BUNDLE = require.resolve("exceljs/dist/exceljs.min.js");
 
 const PORT = Number(process.env.PORT || 3000);
 const USERNAME = process.env.CAPTUREFLOW_USERNAME || "";
@@ -174,9 +175,12 @@ app.put("/api/state", requireAuth, async (req, res, next) => {
   }
 });
 
+app.get("/vendor/exceljs.min.js", (_req, res) => {
+  res.sendFile(EXCELJS_BROWSER_BUNDLE, { dotfiles: "allow" });
+});
 for (const asset of ["index.html", "app.js", "logic.js", "styles.css"]) {
   app.get(asset === "index.html" ? ["/", "/index.html"] : `/${asset}`, (_req, res) => {
-    res.sendFile(path.join(__dirname, asset));
+    res.sendFile(path.join(__dirname, asset), { dotfiles: "allow" });
   });
 }
 app.use((error, _req, res, _next) => {

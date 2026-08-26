@@ -6,14 +6,24 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js",
+    "check": "node --check server.js && node --check logic.js && node --check app.js",
+    "lint": "eslint server.js logic.js app.js *.test.js",
+    "build": "npm run check",
     "test": "node --test"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

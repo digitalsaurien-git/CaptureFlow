@@ -44,6 +44,10 @@ test("connexion puis lecture et écriture de l’état", async t => {
   await new Promise(resolve=>server.once("listening",resolve));
   const base=`http://127.0.0.1:${server.address().port}`;
 
+  const home=await fetch(base);
+  assert.equal(home.status,200);
+  assert.match(await home.text(),/CaptureFlow/);
+
   const login=await fetch(`${base}/api/login`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username:"kader",password:"secret"})});
   assert.equal(login.status,200);
   const cookie=login.headers.get("set-cookie").split(";")[0];
@@ -54,4 +58,9 @@ test("connexion puis lecture et écriture de l’état", async t => {
   const loaded=await fetch(`${base}/api/state`,{headers:{cookie}});
   assert.equal(loaded.status,200);
   assert.equal((await loaded.json()).data.meta.version,6);
+
+  const excelBundle=await fetch(`${base}/vendor/exceljs.min.js`);
+  assert.equal(excelBundle.status,200);
+  assert.match(excelBundle.headers.get("content-type"),/javascript/);
+  assert.ok((await excelBundle.text()).length>100000);
 });

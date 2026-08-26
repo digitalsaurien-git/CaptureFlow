@@ -55,6 +55,9 @@ test("le journal présente les vues synthèse, projet, sans projet, sessions et 
   for (const label of ["Synthèse", "Par projet", "Sans projet", "Détail des sessions", "À corriger"]) assert.match(html, new RegExp(label));
   assert.match(html, /Projet Alpha/);
   assert.match(html, /Tâche libre/);
+  assert.match(html, /openProjectWorkspace\('p1','activity'\)/);
+  assert.match(html, /Exporter Excel/);
+  assert.match(html, /type="date"/);
   assert.doesNotMatch(html, /temps à corriger/);
 });
 
