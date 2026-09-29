@@ -4,11 +4,15 @@ const {
   priorityManualSort,
   isUnreviewedLegacyTask,
   isUnreviewedLongSession,
+  projectActivityScore,
+  sortProjectsByActivity,
   projectOptionsForContext,
   statusAfterTimerStart,
   shouldStopTimerForStatus,
   sessionDurationSeconds,
   sessionInDateRange,
+  addIntervalDate,
+  nextCalendarOccurrence,
   buildActivityReport
 } = require("./logic");
 
@@ -118,4 +122,27 @@ test("un temps historique sans date est exclu d'une période mais reste document
   assert.equal(report.general.totalLegacyRetainedSeconds, 0);
   assert.equal(report.general.totalSeconds, 0);
   assert.equal(report.tasks[0].legacyValidatedSeconds, 900);
+});
+
+
+test("les projets les plus actifs remontent avant les projets peu utilisés", () => {
+  const now = new Date("2026-09-29T10:00:00.000Z").getTime();
+  const projects = [
+    { id: "quiet", name: "Ancien", context: "pro", openCount: 0, updatedAt: "2026-08-01T10:00:00.000Z" },
+    { id: "active", name: "Actif", context: "pro", openCount: 4, updatedAt: "2026-09-28T10:00:00.000Z" }
+  ];
+  const tasks = [{ id: "t1", projectId: "active", updatedAt: "2026-09-29T08:00:00.000Z" }];
+  assert.ok(projectActivityScore(projects[1], tasks, [], now) > projectActivityScore(projects[0], tasks, [], now));
+  assert.deepEqual(sortProjectsByActivity(projects, tasks, []).map(project => project.id), ["active", "quiet"]);
+});
+
+test("les intervalles de récurrence se calculent depuis la date de réalisation", () => {
+  assert.equal(addIntervalDate("2026-09-29", "daily", 2), "2026-10-01");
+  assert.equal(addIntervalDate("2026-09-29", "weekly", 2), "2026-10-13");
+  assert.equal(addIntervalDate("2026-09-29", "monthly", 1), "2026-10-29");
+});
+
+test("une récurrence calendaire hebdomadaire retrouve le prochain jour fixe", () => {
+  const rule = { frequency: "weekly", interval: 1, weekday: 1, startDate: "2026-09-28" };
+  assert.equal(nextCalendarOccurrence(rule, "2026-09-28"), "2026-10-05");
 });
