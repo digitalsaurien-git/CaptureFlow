@@ -56,7 +56,7 @@ function recurringNextDue(rule){
       ? addIntervalDate(base,rule.frequency,rule.interval)
       : base;
   }
-  if(!rule.lastGeneratedDate) return rule.startDate||"";
+  if(!rule.lastGeneratedDate) return firstCalendarOccurrence(rule);
   return nextCalendarOccurrence(rule,rule.lastGeneratedDate);
 }
 
