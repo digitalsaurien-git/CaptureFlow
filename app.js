@@ -1217,7 +1217,7 @@ function saveTaskFromForm(){
     dueDate:document.getElementById("taskDueDate").value||null,
     estimate:Number(document.getElementById("taskEstimate").value)||0,
     pomodoroMinutes:Math.max(5,Number(document.getElementById("taskPomodoroMinutes").value)||25),
-    pomodoroEndsAt:existing?.pomodoroEndsAt||null,
+    pomodoroEndsAt:status==="doing"?(existing?.pomodoroEndsAt||null):null,
     tags:document.getElementById("taskTags").value.split(",").map(x=>x.trim()).filter(Boolean),
     checklist:readChecklistEditor(),
     manualOrder:existing && existing.priority===document.getElementById("taskPriority").value?existing.manualOrder:Date.now(),
@@ -1324,9 +1324,11 @@ function togglePomodoro(id){
   const t=state.tasks.find(x=>x.id===id); if(!t)return;
   if(t.pomodoroEndsAt){
     t.pomodoroEndsAt=null;
+    if(t.timerStartedAt) stopTimer(t);
   }else{
     const minutes=Math.max(5,Number(t.pomodoroMinutes)||25);
     t.pomodoroEndsAt=new Date(Date.now()+minutes*60000).toISOString();
+    if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
     if(!t.timerStartedAt){
       state.tasks.forEach(other=>{ if(other.id!==id && other.timerStartedAt) stopTimer(other); });
       t.timerStartedAt=new Date().toISOString();
@@ -1342,10 +1344,13 @@ function checkPomodoros(){
   state.tasks.forEach(t=>{
     if(t.pomodoroEndsAt && Date.now()>=new Date(t.pomodoroEndsAt).getTime()){
       t.pomodoroEndsAt=null;
+      if(t.timerStartedAt) stopTimer(t);
       t.updatedAt=new Date().toISOString();
       changed=true;
       if("Notification" in window && Notification.permission==="granted"){
         new Notification("CaptureFlow",{body:`Pomodoro terminé : ${t.title}`});
+      }else{
+        alert(`Pomodoro terminé : ${t.title}`);
       }
     }
   });
@@ -1391,6 +1396,7 @@ Le chrono a peut-être été oublié. Indique la durée réelle en minutes, ou v
 function toggleTimer(id){
   const t=state.tasks.find(x=>x.id===id); if(!t)return;
   if(t.timerStartedAt){
+    t.pomodoroEndsAt=null;
     stopTimer(t);
   }else{
     state.tasks.forEach(other=>{ if(other.id!==id && other.timerStartedAt) stopTimer(other); });
