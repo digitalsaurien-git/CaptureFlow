@@ -60,6 +60,17 @@ function recurringNextDue(rule){
   return nextCalendarOccurrence(rule,rule.lastGeneratedDate);
 }
 
+function recordRecurringCompletion(task){
+  if(!task?.recurringSourceId || !task.completedAt) return;
+  const rule=state.recurringTasks.find(rule=>rule.id===task.recurringSourceId);
+  if(!rule) return;
+  rule.lastCompletedDate=task.completedAt.slice(0,10);
+  if(rule.mode==="completion"){
+    rule.nextDueDate=addIntervalDate(rule.lastCompletedDate,rule.frequency,rule.interval);
+  }
+  rule.updatedAt=new Date().toISOString();
+}
+
 function ensureRecurringOccurrences(targetState=state){
   if(!targetState?.recurringTasks || !targetState?.tasks) return false;
   const today=todayISO();
@@ -315,7 +326,7 @@ function moveTask(id,direction,scope="project"){
   const t=state.tasks.find(x=>x.id===id); if(!t)return;
   let items=[];
   if(scope==="project") items=state.tasks.filter(x=>x.projectId===t.projectId);
-  else if(scope==="today") items=state.tasks.filter(x=>(x.status==="today" || (x.dueDate===todayISO() && x.status!=="done")));
+  else if(scope==="today") items=state.tasks.filter(x=>(x.status==="today" || (x.dueDate===todayISO() && !["doing","waiting","waiting_reply","done"].includes(x.status))));
   else items=state.tasks.filter(x=>!x.projectId);
   items=manualTaskSort(items.filter(x=>(priorityRank[x.priority]??9)===(priorityRank[t.priority]??9)));
   const i=items.findIndex(x=>x.id===id), j=i+direction;
@@ -1237,16 +1248,7 @@ function saveTaskFromForm(){
     data.timerStartedAt = null;
   }
   if(existing) Object.assign(existing,data); else state.tasks.unshift(data);
-  if(status==="done" && data.recurringSourceId){
-    const rule=state.recurringTasks.find(rule=>rule.id===data.recurringSourceId);
-    if(rule){
-      rule.lastCompletedDate=(data.completedAt||new Date().toISOString()).slice(0,10);
-      if(rule.mode==="completion"){
-        rule.nextDueDate=addIntervalDate(rule.lastCompletedDate,rule.frequency,rule.interval);
-      }
-      rule.updatedAt=new Date().toISOString();
-    }
-  }
+  if(status==="done") recordRecurringCompletion(existing||data);
   saveState();
 }
 function deleteTask(){
@@ -1424,6 +1426,7 @@ function bindDrag(){
         if(zone.dataset.projectId) t.projectId=zone.dataset.projectId;
         t.updatedAt=new Date().toISOString();
         t.completedAt=t.status==="done"?new Date().toISOString():null;
+        if(t.status==="done") recordRecurringCompletion(t);
         saveState();
       }
     });
