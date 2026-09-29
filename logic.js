@@ -92,24 +92,31 @@
     return date.toISOString().slice(0, 10);
   }
 
+  function firstCalendarOccurrence(rule) {
+    const startDate = rule?.startDate || "";
+    if (!startDate) return "";
+    if ((rule?.frequency || "weekly") !== "weekly") return startDate;
+    const targetWeekday = Number(rule?.weekday ?? 1);
+    const date = new Date(startDate + "T12:00:00");
+    const offset = (targetWeekday - date.getDay() + 7) % 7;
+    date.setDate(date.getDate() + offset);
+    return date.toISOString().slice(0, 10);
+  }
+
   function nextCalendarOccurrence(rule, fromDate) {
     const frequency = rule?.frequency || "weekly";
     const interval = Math.max(1, Number(rule?.interval) || 1);
-    const startDate = rule?.startDate || fromDate;
-    if (!startDate) return "";
-    if (frequency !== "weekly") {
-      let candidate = startDate;
-      while (candidate <= fromDate) candidate = addIntervalDate(candidate, frequency, interval);
-      return candidate;
-    }
+    if (!fromDate) return firstCalendarOccurrence(rule);
+    if (frequency !== "weekly") return addIntervalDate(fromDate, frequency, interval);
     const targetWeekday = Number(rule?.weekday ?? 1);
-    let candidate = startDate;
-    while (true) {
-      const date = new Date(candidate + "T12:00:00");
-      if (date.getDay() === targetWeekday && candidate > fromDate) return candidate;
-      date.setDate(date.getDate() + 1);
-      candidate = date.toISOString().slice(0, 10);
+    const date = new Date(fromDate + "T12:00:00");
+    if (date.getDay() !== targetWeekday) {
+      const offset = (targetWeekday - date.getDay() + 7) % 7 || 7;
+      date.setDate(date.getDate() + offset);
+      return date.toISOString().slice(0, 10);
     }
+    date.setDate(date.getDate() + 7 * interval);
+    return date.toISOString().slice(0, 10);
   }
 
   function buildActivityReport(source, filters = {}) {
@@ -475,6 +482,7 @@
     sessionDurationSeconds,
     sessionInDateRange,
     addIntervalDate,
+    firstCalendarOccurrence,
     nextCalendarOccurrence,
     buildActivityReport,
     buildActivityWorkbook
