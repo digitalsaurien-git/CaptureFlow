@@ -330,7 +330,7 @@
     workbook.created = new Date();
     const duration = seconds => Math.max(0, Number(seconds) || 0) / 86400;
     const contextLabel = value => ({ pro: "Professionnel", perso: "Personnel", all: "Tous" })[value] || value;
-    const statusLabel = value => ({ inbox: "Corbeille", today: "À faire aujourd’hui", doing: "En cours", waiting: "En attente", done: "Terminé", well: "Puits", active: "Actif", paused: "En pause", completed: "Terminé" })[value] || value;
+    const statusLabel = value => ({ inbox: "Corbeille", today: "À faire aujourd’hui", doing: "En cours", waiting: "En attente", waiting_reply: "En attente de retour", done: "Terminé", well: "Puits", active: "Actif", paused: "En pause", completed: "Terminé" })[value] || value;
     const priorityLabel = value => ({ urgent: "Urgente", high: "Haute", medium: "Moyenne", low: "Basse" })[value] || value;
     const styleSheet = (sheet, durationColumns = []) => {
       sheet.views = [{ state: "frozen", ySplit: 1 }];
