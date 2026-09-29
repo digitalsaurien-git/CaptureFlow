@@ -12,6 +12,7 @@ const {
   sessionDurationSeconds,
   sessionInDateRange,
   addIntervalDate,
+  firstCalendarOccurrence,
   nextCalendarOccurrence,
   buildActivityReport
 } = require("./logic");
@@ -142,7 +143,8 @@ test("les intervalles de récurrence se calculent depuis la date de réalisation
   assert.equal(addIntervalDate("2026-09-29", "monthly", 1), "2026-10-29");
 });
 
-test("une récurrence calendaire hebdomadaire retrouve le prochain jour fixe", () => {
-  const rule = { frequency: "weekly", interval: 1, weekday: 1, startDate: "2026-09-28" };
-  assert.equal(nextCalendarOccurrence(rule, "2026-09-28"), "2026-10-05");
+test("une récurrence calendaire hebdomadaire respecte le jour fixe et l'intervalle", () => {
+  const rule = { frequency: "weekly", interval: 2, weekday: 1, startDate: "2026-09-29" };
+  assert.equal(firstCalendarOccurrence(rule), "2026-10-05");
+  assert.equal(nextCalendarOccurrence(rule, "2026-10-05"), "2026-10-19");
 });
