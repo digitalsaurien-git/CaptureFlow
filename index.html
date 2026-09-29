@@ -142,6 +142,7 @@
             <option value="today">À faire aujourd’hui</option>
             <option value="doing">En cours</option>
             <option value="waiting">En attente</option>
+            <option value="waiting_reply">En attente de retour</option>
             <option value="done">Terminé</option>
             <option value="well">Puits</option>
           </select>
@@ -162,6 +163,10 @@
 
         <label>Durée estimée (min)
           <input id="taskEstimate" type="number" min="0" step="5" value="30" />
+        </label>
+
+        <label>Pomodoro (min)
+          <input id="taskPomodoroMinutes" type="number" min="5" step="5" value="25" />
         </label>
       </div>
 
@@ -249,14 +254,30 @@
         <label>Projet
           <select id="recurringProject"></select>
         </label>
-        <label>Fréquence
-          <select id="recurringFrequency"><option value="daily">Tous les jours</option><option value="weekly" selected>Toutes les semaines</option></select>
+        <label>Répéter selon
+          <select id="recurringMode">
+            <option value="calendar" selected>Le calendrier</option>
+            <option value="completion">La date de réalisation</option>
+          </select>
         </label>
-        <label>Jour (si hebdomadaire)
+        <label>Unité
+          <select id="recurringFrequency">
+            <option value="daily">Jour(s)</option>
+            <option value="weekly" selected>Semaine(s)</option>
+            <option value="monthly">Mois</option>
+          </select>
+        </label>
+        <label>Tous les
+          <input id="recurringInterval" type="number" min="1" max="365" value="1" />
+        </label>
+        <label>Jour (récurrence calendaire hebdomadaire)
           <select id="recurringWeekday">
             <option value="1">Lundi</option><option value="2">Mardi</option><option value="3">Mercredi</option>
             <option value="4">Jeudi</option><option value="5">Vendredi</option><option value="6">Samedi</option><option value="0">Dimanche</option>
           </select>
+        </label>
+        <label>Première échéance
+          <input id="recurringStartDate" type="date" />
         </label>
         <label>Durée estimée (min)
           <input id="recurringEstimate" type="number" min="0" step="5" value="30" />
