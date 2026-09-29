@@ -42,7 +42,7 @@ nav{display:grid;gap:7px}.nav-btn{border:0;background:transparent;color:#d4e5e1;
 .task-title-row{display:flex;justify-content:space-between;gap:10px}.task-title{font-weight:750}.task-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted)}
 .badge{padding:4px 7px;border-radius:999px;background:var(--surface-2)}.badge.pro{background:#dcecff}.badge.perso{background:#e5f4df}.badge.overdue{background:#f9dddd;color:#9b2525}
 .inline-actions{display:flex;gap:6px;flex-wrap:wrap}.icon-btn{border:0;background:var(--surface-2);border-radius:9px;padding:7px 9px}
-.kanban{display:grid;grid-template-columns:repeat(5,minmax(230px,1fr));gap:14px;overflow-x:auto;padding-bottom:10px}
+.kanban{display:grid;grid-template-columns:repeat(6,minmax(230px,1fr));gap:14px;overflow-x:auto;padding-bottom:10px}
 .kanban-col{background:#eaf0ee;border-radius:14px;padding:12px;min-height:420px}.kanban-col h3{margin:2px 0 12px;font-size:15px;display:flex;justify-content:space-between}
 .dropzone{display:grid;gap:10px;min-height:340px}.dropzone.drag-over{outline:2px dashed var(--primary);outline-offset:4px;border-radius:10px}
 .project-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}.project-card h3{margin:0 0 8px}.progress{height:9px;background:#e6ecea;border-radius:999px;overflow:hidden}.progress>span{display:block;height:100%;background:var(--primary)}
@@ -182,7 +182,7 @@ nav{display:grid;gap:7px}.nav-btn{border:0;background:transparent;color:#d4e5e1;
 .project-card-metrics strong{overflow:hidden;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
 .project-card-metrics small,.project-last-activity{color:var(--muted);font-size:11px}
 .project-last-activity{margin:0}
-.today-subtabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:20px 0}
+.today-subtabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:20px 0}
 .today-subtab{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:13px 15px;border:1px solid var(--border);border-radius:12px;background:white;color:var(--muted);font:inherit;font-weight:750;text-align:left;cursor:pointer}
 .today-subtab strong{display:grid;place-items:center;min-width:25px;height:25px;border-radius:999px;background:var(--surface-2);font-size:12px}
 .today-subtab.active{border-color:var(--primary);background:#edf7f4;color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
@@ -221,3 +221,5 @@ nav{display:grid;gap:7px}.nav-btn{border:0;background:transparent;color:#d4e5e1;
   .print-report th,.print-report td{padding:7px;border:1px solid #cad9d5;text-align:left;vertical-align:top}
   .print-report th{background:#eaf4f1}
 }
+
+.pomodoro-badge{background:#fde8e8;color:#9b2525;font-weight:750}
