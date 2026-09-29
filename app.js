@@ -1,7 +1,7 @@
 const STORAGE_KEY = "captureflow_local_v1";
 
 const defaultState = {
-  meta: { version: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  meta: { version: 8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", todayTab: "doing", activityDateFrom: "", activityDateTo: "", activityProjectIds: [], calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
   projects: [],
   tasks: [],
@@ -38,6 +38,55 @@ function esc(v=""){ return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':
 function fmtDate(v){ if(!v) return ""; return new Date(v+"T12:00:00").toLocaleDateString("fr-FR"); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
+function recurrenceLabel(rule){
+  const n=Math.max(1,Number(rule?.interval)||1);
+  const unit=rule?.frequency==="monthly"?"mois":rule?.frequency==="weekly"?"semaine(s)":"jour(s)";
+  if(rule?.mode==="completion") return `Tous les ${n} ${unit} après réalisation`;
+  if(rule?.frequency==="weekly" && n===1){
+    return "Chaque "+["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][Number(rule.weekday??1)];
+  }
+  return `Tous les ${n} ${unit}`;
+}
+
+function recurringNextDue(rule){
+  if(rule?.mode==="completion"){
+    const base=rule.lastCompletedDate||rule.startDate;
+    if(!base) return "";
+    return rule.lastCompletedDate
+      ? addIntervalDate(base,rule.frequency,rule.interval)
+      : base;
+  }
+  if(!rule.lastGeneratedDate) return rule.startDate||"";
+  return nextCalendarOccurrence(rule,rule.lastGeneratedDate);
+}
+
+function ensureRecurringOccurrences(targetState=state){
+  if(!targetState?.recurringTasks || !targetState?.tasks) return false;
+  const today=todayISO();
+  let changed=false;
+  targetState.recurringTasks.forEach(rule=>{
+    const next=recurringNextDue(rule);
+    rule.nextDueDate=next||rule.nextDueDate||null;
+    if(!next || next>today) return;
+    const existing=targetState.tasks.some(task=>task.recurringSourceId===rule.id && task.recurringOccurrenceDate===next);
+    if(existing) return;
+    const now=new Date().toISOString();
+    targetState.tasks.unshift({
+      id:uid("task"), title:rule.title, description:"Tâche créée automatiquement depuis une récurrence.", remaining:"",
+      context:rule.context, projectId:rule.projectId||null, status:"today", priority:rule.priority||"medium",
+      dueDate:next, estimate:rule.estimate||0, pomodoroMinutes:25, pomodoroEndsAt:null,
+      tags:["récurrente"], checklist:[], manualOrder:Date.now(), createdAt:now, updatedAt:now,
+      completedAt:null, timeSpentSeconds:0, legacyTimeSeconds:0, legacyTimeReviewed:true,
+      timerStartedAt:null, recurringSourceId:rule.id, recurringOccurrenceDate:next
+    });
+    rule.lastGeneratedDate=next;
+    rule.updatedAt=now;
+    rule.nextDueDate=recurringNextDue(rule)||null;
+    changed=true;
+  });
+  return changed;
+}
+
 function normalizeState(parsed){
   const sourceVersion=Number(parsed?.meta?.version)||0;
   const merged = { ...structuredClone(defaultState), ...(parsed||{}),
@@ -50,7 +99,7 @@ function normalizeState(parsed){
     improvements:Array.isArray(parsed?.improvements)?parsed.improvements:[],
     recurringTasks:Array.isArray(parsed?.recurringTasks)?parsed.recurringTasks:[]
   };
-  merged.meta.version=7;
+  merged.meta.version=8;
   if(!Array.isArray(merged.settings.activityProjectIds)) merged.settings.activityProjectIds=[];
   merged.tasks.forEach((t,i)=>{
     if(!Array.isArray(t.checklist)) t.checklist=[];
@@ -61,8 +110,24 @@ function normalizeState(parsed){
       t.legacyTimeSeconds=Math.max(0,(Number(t.timeSpentSeconds)||0)-journaled);
     }
     if(t.legacyTimeReviewed===undefined) t.legacyTimeReviewed=sourceVersion>0&&sourceVersion<7;
+    if(t.pomodoroMinutes===undefined) t.pomodoroMinutes=25;
+    if(t.pomodoroEndsAt===undefined) t.pomodoroEndsAt=null;
+  });
+  merged.projects.forEach(project=>{
+    if(project.openCount===undefined) project.openCount=0;
+    if(project.lastOpenedAt===undefined) project.lastOpenedAt=null;
+  });
+  merged.recurringTasks.forEach(rule=>{
+    if(!rule.mode) rule.mode="calendar";
+    if(!rule.frequency) rule.frequency="weekly";
+    if(rule.interval===undefined) rule.interval=1;
+    if(!rule.startDate) rule.startDate=(rule.createdAt||new Date().toISOString()).slice(0,10);
+    if(rule.lastGeneratedDate===undefined) rule.lastGeneratedDate=null;
+    if(rule.lastCompletedDate===undefined) rule.lastCompletedDate=null;
+    if(rule.nextDueDate===undefined) rule.nextDueDate=rule.startDate;
   });
   merged.improvements.forEach(item=>{ if(!item.context) item.context="pro"; });
+  ensureRecurringOccurrences(merged);
   return merged;
 }
 
@@ -272,10 +337,12 @@ function taskCard(t, compact=false){
       ${t.dueDate?`<span class="badge ${overdue?"overdue":""}">${fmtDate(t.dueDate)}</span>`:""}
       ${t.estimate?`<span class="badge">Prévu ${t.estimate} min</span>`:""}
       ${taskTrackedSeconds(t)>0||running?`<span class="badge timer-badge ${running && elapsedSeconds(t)>14400?"timer-warning":""}">${running?"⏱":"Temps"} ${formatDuration(taskTrackedSeconds(t))}${running && elapsedSeconds(t)>14400?" · à vérifier":""}</span>`:""}
+      ${t.pomodoroEndsAt?`<span class="badge pomodoro-badge">🍅 ${formatPomodoroRemaining(t)}</span>`:""}
       ${(t.tags||[]).map(x=>`<span class="badge">#${esc(x)}</span>`).join("")}
     </div>
     <div class="inline-actions">
       <button class="btn small ${running?"danger":"secondary"}" onclick="event.stopPropagation();toggleTimer('${t.id}')">${running?"Pause":"Démarrer"}</button>
+      <button class="btn small secondary" onclick="event.stopPropagation();togglePomodoro('${t.id}')">${t.pomodoroEndsAt?"Arrêter Pomodoro":"Pomodoro"}</button>
     </div>
   </article>`;
 }
@@ -293,28 +360,34 @@ function setView(view){
   renderCurrent();
 }
 function renderCurrent(){
+  if(ensureRecurringOccurrences(state)){
+    state.meta.updatedAt=new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+    queueCloudSave();
+  }
   const view=state.settings.currentView||"today";
   ({dashboard:renderDashboard,today:renderToday,calendar:renderCalendar,inbox:renderInbox,kanban:renderKanban,projects:renderProjects,projectDetail:renderProjectDetail,activity:renderActivity,improvements:renderImprovements,well:renderWell,notes:renderNotes,admin:renderAdmin})[view]();
 }
 function empty(msg){ return `<div class="empty">${esc(msg)}</div>`; }
 
 function setTodayTab(tab){
-  if(!["doing","today","waiting"].includes(tab))return;
+  if(!["doing","today","waiting","waiting_reply"].includes(tab))return;
   state.settings.todayTab=tab;
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   renderCurrent();
 }
 function renderToday(){
   const scheduled=manualTaskSort(filtered(state.tasks.filter(t=>
-    t.status==="today" || (t.dueDate===todayISO() && !["doing","waiting","done"].includes(t.status))
+    t.status==="today" || (t.dueDate===todayISO() && !["doing","waiting","waiting_reply","done"].includes(t.status))
   )));
   const doing=sortTasks(filtered(state.tasks.filter(t=>t.status==="doing")));
   const waiting=sortTasks(filtered(state.tasks.filter(t=>t.status==="waiting")));
-  const totalMin=[...scheduled,...doing,...waiting].reduce((sum,task)=>sum+(Number(task.estimate)||0),0);
+  const waitingReply=sortTasks(filtered(state.tasks.filter(t=>t.status==="waiting_reply")));
+  const totalMin=[...scheduled,...doing,...waiting,...waitingReply].reduce((sum,task)=>sum+(Number(task.estimate)||0),0);
   const completedToday=filtered(state.tasks.filter(task=>
     task.status==="done" && task.completedAt?.slice(0,10)===todayISO()
   )).length;
-  const tab=["doing","today","waiting"].includes(state.settings.todayTab)
+  const tab=["doing","today","waiting","waiting_reply"].includes(state.settings.todayTab)
     ? state.settings.todayTab
     : "doing";
   const tabButton=(key,label,count)=>`<button class="today-subtab ${tab===key?"active":""}" onclick="setTodayTab('${key}')"><span>${label}</span><strong>${count}</strong></button>`;
@@ -323,6 +396,8 @@ function renderToday(){
     body=`<div class="section-title"><h3>En cours</h3></div><div class="task-list">${doing.length?doing.map(task=>taskCard(task)).join(""):empty("Aucune tâche en cours.")}</div>`;
   }else if(tab==="waiting"){
     body=`<div class="section-title"><h3>En attente</h3></div><div class="task-list">${waiting.length?waiting.map(task=>taskCard(task)).join(""):empty("Aucune tâche en attente.")}</div>`;
+  }else if(tab==="waiting_reply"){
+    body=`<div class="section-title"><h3>En attente de retour</h3></div><div class="task-list">${waitingReply.length?waitingReply.map(task=>taskCard(task)).join(""):empty("Aucune tâche en attente de retour.")}</div>`;
   }else{
     body=`<div class="section-title"><h3>À faire aujourd’hui</h3><button class="btn small secondary" onclick="openNewTask('today')">Ajouter</button></div>
       <div class="task-list">${scheduled.length?scheduled.map(task=>`<div class="ordered-task"><div class="order-buttons"><button class="icon-btn" onclick="moveTask('${task.id}',-1,'today')">↑</button><button class="icon-btn" onclick="moveTask('${task.id}',1,'today')">↓</button></div>${taskCard(task)}</div>`).join(""):empty("Ta journée est vide. Ajoute une tâche ou déplace-en une depuis le puits.")}</div>`;
@@ -338,6 +413,7 @@ function renderToday(){
       ${tabButton("doing","En cours",doing.length)}
       ${tabButton("today","À faire aujourd’hui",scheduled.length)}
       ${tabButton("waiting","En attente",waiting.length)}
+      ${tabButton("waiting_reply","En attente de retour",waitingReply.length)}
     </div>
     <div class="today-tab-body">${body}</div>`;
   bindDrag();
@@ -396,7 +472,7 @@ function renderInboxFiltered(){
 }
 
 const kanbanColumns=[
-  ["inbox","Corbeille"],["today","À faire"],["doing","En cours"],["waiting","En attente"],["done","Terminé"]
+  ["inbox","Corbeille"],["today","À faire"],["doing","En cours"],["waiting","En attente"],["waiting_reply","En attente de retour"],["done","Terminé"]
 ];
 function renderKanban(){
   document.getElementById("kanbanView").innerHTML=`<div class="card kanban-info"><strong>Kanban général</strong><p class="muted">Cette vue contient uniquement les tâches sans projet. Les tâches rattachées à un projet sont gérées dans le Kanban du projet.</p></div><div class="kanban">${kanbanColumns.map(([key,label])=>{
@@ -407,7 +483,7 @@ function renderKanban(){
 }
 
 function renderProjects(){
-  const projects=[...filtered(state.projects)].sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr",{sensitivity:"base"}));
+  const projects=sortProjectsByActivity(filtered(state.projects),state.tasks,state.activitySessions);
   document.getElementById("projectsView").innerHTML=`
     <div class="section-title"><h3>${projects.length} projet(s)</h3><button class="btn primary" onclick="openNewProject()">+ Nouveau projet</button></div>
     <div class="grid project-grid">${projects.length?projects.map(p=>{
@@ -438,10 +514,13 @@ function projectStatusLabel(status){
   return ({active:"Actif",paused:"En pause",completed:"Terminé"})[status]||status;
 }
 function taskStatusLabel(status){
-  return ({inbox:"Corbeille",today:"À faire",doing:"En cours",waiting:"En attente",done:"Terminé",well:"Puits"})[status]||status;
+  return ({inbox:"Corbeille",today:"À faire",doing:"En cours",waiting:"En attente",waiting_reply:"En attente de retour",done:"Terminé",well:"Puits"})[status]||status;
 }
 function openProjectWorkspace(id,tab="tasks"){
   const p=state.projects.find(x=>x.id===id); if(!p)return;
+  p.openCount=(Number(p.openCount)||0)+1;
+  p.lastOpenedAt=new Date().toISOString();
+  p.updatedAt=p.updatedAt||p.lastOpenedAt;
   state.settings.currentProjectId=id;
   state.settings.projectTab=tab;
   state.settings.currentView="projectDetail";
@@ -562,6 +641,10 @@ function openNewRecurring(){
   document.getElementById("recurringId").value="";
   document.getElementById("recurringDialogTitle").textContent="Nouvelle tâche récurrente";
   document.getElementById("recurringContext").value=preferredCreationContext();
+  document.getElementById("recurringMode").value="calendar";
+  document.getElementById("recurringFrequency").value="weekly";
+  document.getElementById("recurringInterval").value=1;
+  document.getElementById("recurringStartDate").value=todayISO();
   document.getElementById("recurringProject").innerHTML=recurringProjectOptions("",document.getElementById("recurringContext").value);
   document.getElementById("deleteRecurringBtn").classList.add("hidden");
   document.getElementById("recurringDialog").showModal();
@@ -573,8 +656,11 @@ function editRecurring(id){
   document.getElementById("recurringTitle").value=r.title;
   document.getElementById("recurringContext").value=r.context;
   document.getElementById("recurringProject").innerHTML=recurringProjectOptions(r.projectId||"",r.context,true);
+  document.getElementById("recurringMode").value=r.mode||"calendar";
   document.getElementById("recurringFrequency").value=r.frequency;
+  document.getElementById("recurringInterval").value=r.interval||1;
   document.getElementById("recurringWeekday").value=String(r.weekday??1);
+  document.getElementById("recurringStartDate").value=r.startDate||todayISO();
   document.getElementById("recurringEstimate").value=r.estimate||0;
   document.getElementById("recurringPriority").value=r.priority||"medium";
   document.getElementById("deleteRecurringBtn").classList.remove("hidden");
@@ -594,14 +680,22 @@ function saveRecurringFromForm(){
     title:document.getElementById("recurringTitle").value.trim(),
     context,
     projectId,
+    mode:document.getElementById("recurringMode").value,
     frequency:document.getElementById("recurringFrequency").value,
+    interval:Math.max(1,Number(document.getElementById("recurringInterval").value)||1),
     weekday:Number(document.getElementById("recurringWeekday").value),
+    startDate:document.getElementById("recurringStartDate").value||todayISO(),
+    lastGeneratedDate:existing?.lastGeneratedDate||null,
+    lastCompletedDate:existing?.lastCompletedDate||null,
+    nextDueDate:existing?.nextDueDate||null,
     estimate:Number(document.getElementById("recurringEstimate").value)||0,
     priority:document.getElementById("recurringPriority").value,
     createdAt:existing?.createdAt||new Date().toISOString(),
     updatedAt:new Date().toISOString()
   };
+  data.nextDueDate=recurringNextDue(data)||data.startDate;
   if(existing)Object.assign(existing,data);else state.recurringTasks.unshift(data);
+  ensureRecurringOccurrences(state);
   saveState();
 }
 function deleteRecurring(){
@@ -612,17 +706,21 @@ function deleteRecurring(){
   }
 }
 function recurringDueToday(r){
-  return r.frequency==="daily" || (r.frequency==="weekly" && new Date().getDay()===Number(r.weekday));
+  return (r.nextDueDate||recurringNextDue(r))===todayISO();
 }
 function createTaskFromRecurring(id,startNow=false){
   const r=state.recurringTasks.find(x=>x.id===id); if(!r)return;
   const t={
     id:uid("task"),title:r.title,description:"Tâche créée depuis une récurrence.",remaining:"",
     context:r.context,projectId:r.projectId||null,status:startNow?"doing":"today",priority:r.priority||"medium",
-    dueDate:todayISO(),estimate:r.estimate||0,tags:["récurrente"],checklist:[],manualOrder:Date.now(),
+    dueDate:todayISO(),estimate:r.estimate||0,pomodoroMinutes:25,pomodoroEndsAt:null,tags:["récurrente"],checklist:[],manualOrder:Date.now(),
     createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),completedAt:null,
-    timeSpentSeconds:0,legacyTimeSeconds:0,timerStartedAt:startNow?new Date().toISOString():null,recurringSourceId:r.id
+    timeSpentSeconds:0,legacyTimeSeconds:0,legacyTimeReviewed:true,timerStartedAt:startNow?new Date().toISOString():null,
+    recurringSourceId:r.id,recurringOccurrenceDate:todayISO()
   };
+  r.lastGeneratedDate=todayISO();
+  r.nextDueDate=recurringNextDue(r)||null;
+  r.updatedAt=new Date().toISOString();
   if(startNow) state.tasks.forEach(other=>{if(other.timerStartedAt)stopTimer(other)});
   state.tasks.unshift(t);
   saveState();
@@ -636,7 +734,8 @@ function renderRecurringContent(){
         <div class="task-meta">
           <span class="badge ${r.context}">${r.context==="pro"?"Pro":"Perso"}</span>
           ${r.projectId?`<span class="badge">${esc(projectName(r.projectId))}</span>`:""}
-          <span class="badge">${r.frequency==="daily"?"Tous les jours":"Chaque "+["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][r.weekday]}</span>
+          <span class="badge">${recurrenceLabel(r)}</span>
+          ${r.nextDueDate?`<span class="badge">Prochaine : ${fmtDate(r.nextDueDate)}</span>`:""}
           <span class="badge">${r.estimate||0} min</span>
         </div>
         ${recurringDueToday(r)?`<p class="recurring-due">Prévue aujourd’hui</p>`:""}
@@ -1062,6 +1161,7 @@ function openNewTask(status="inbox"){
   document.getElementById("taskDialogTitle").textContent="Nouvelle tâche";
   document.getElementById("taskStatus").value=status;
   document.getElementById("taskEstimate").value=30;
+  document.getElementById("taskPomodoroMinutes").value=25;
   document.getElementById("taskContext").value=preferredCreationContext();
   document.getElementById("deleteTaskBtn").classList.add("hidden");
   renderChecklistEditor([]);
@@ -1083,6 +1183,7 @@ function openTask(id){
   document.getElementById("taskPriority").value=t.priority;
   document.getElementById("taskDueDate").value=t.dueDate||"";
   document.getElementById("taskEstimate").value=t.estimate||0;
+  document.getElementById("taskPomodoroMinutes").value=t.pomodoroMinutes||25;
   document.getElementById("taskTags").value=(t.tags||[]).join(", ");
   renderChecklistEditor(normalizeChecklist(t));
   document.getElementById("deleteTaskBtn").classList.remove("hidden");
@@ -1113,6 +1214,8 @@ function saveTaskFromForm(){
     priority:document.getElementById("taskPriority").value,
     dueDate:document.getElementById("taskDueDate").value||null,
     estimate:Number(document.getElementById("taskEstimate").value)||0,
+    pomodoroMinutes:Math.max(5,Number(document.getElementById("taskPomodoroMinutes").value)||25),
+    pomodoroEndsAt:existing?.pomodoroEndsAt||null,
     tags:document.getElementById("taskTags").value.split(",").map(x=>x.trim()).filter(Boolean),
     checklist:readChecklistEditor(),
     manualOrder:existing && existing.priority===document.getElementById("taskPriority").value?existing.manualOrder:Date.now(),
@@ -1130,6 +1233,16 @@ function saveTaskFromForm(){
     data.timerStartedAt = null;
   }
   if(existing) Object.assign(existing,data); else state.tasks.unshift(data);
+  if(status==="done" && data.recurringSourceId){
+    const rule=state.recurringTasks.find(rule=>rule.id===data.recurringSourceId);
+    if(rule){
+      rule.lastCompletedDate=(data.completedAt||new Date().toISOString()).slice(0,10);
+      if(rule.mode==="completion"){
+        rule.nextDueDate=addIntervalDate(rule.lastCompletedDate,rule.frequency,rule.interval);
+      }
+      rule.updatedAt=new Date().toISOString();
+    }
+  }
   saveState();
 }
 function deleteTask(){
@@ -1196,6 +1309,44 @@ function deleteNote(){
   if(id&&confirm("Supprimer ce post-it ?")){state.notes=state.notes.filter(x=>x.id!==id);saveState();document.getElementById("noteDialog").close();}
 }
 
+
+function formatPomodoroRemaining(t){
+  if(!t?.pomodoroEndsAt) return "";
+  const seconds=Math.max(0,Math.ceil((new Date(t.pomodoroEndsAt).getTime()-Date.now())/1000));
+  const m=Math.floor(seconds/60), s=seconds%60;
+  return `${m}:${String(s).padStart(2,"0")}`;
+}
+function togglePomodoro(id){
+  const t=state.tasks.find(x=>x.id===id); if(!t)return;
+  if(t.pomodoroEndsAt){
+    t.pomodoroEndsAt=null;
+  }else{
+    const minutes=Math.max(5,Number(t.pomodoroMinutes)||25);
+    t.pomodoroEndsAt=new Date(Date.now()+minutes*60000).toISOString();
+    if(!t.timerStartedAt){
+      state.tasks.forEach(other=>{ if(other.id!==id && other.timerStartedAt) stopTimer(other); });
+      t.timerStartedAt=new Date().toISOString();
+      t.status="doing";
+      t.completedAt=null;
+    }
+  }
+  t.updatedAt=new Date().toISOString();
+  saveState();
+}
+function checkPomodoros(){
+  let changed=false;
+  state.tasks.forEach(t=>{
+    if(t.pomodoroEndsAt && Date.now()>=new Date(t.pomodoroEndsAt).getTime()){
+      t.pomodoroEndsAt=null;
+      t.updatedAt=new Date().toISOString();
+      changed=true;
+      if("Notification" in window && Notification.permission==="granted"){
+        new Notification("CaptureFlow",{body:`Pomodoro terminé : ${t.title}`});
+      }
+    }
+  });
+  if(changed) saveState();
+}
 
 function stopTimer(t){
   if(!t?.timerStartedAt) return;
@@ -1439,9 +1590,12 @@ document.getElementById("loginForm").addEventListener("submit",async e=>{
 });
 document.getElementById("logoutBtn").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.reload();});
 
-window.openTask=openTask;window.openNewTask=openNewTask;window.moveTask=moveTask;window.setDashboardTab=setDashboardTab;window.setAdminTab=setAdminTab;window.setActivityTab=setActivityTab;window.setTodayTab=setTodayTab;window.setActivityDateFilter=setActivityDateFilter;window.setActivityProjects=setActivityProjects;window.clearActivityFilters=clearActivityFilters;window.openNewRecurring=openNewRecurring;window.editRecurring=editRecurring;window.createTaskFromRecurring=createTaskFromRecurring;window.openProjectWorkspace=openProjectWorkspace;window.setProjectTab=setProjectTab;window.editProject=editProject;window.openNewTaskForProject=openNewTaskForProject;window.removeChecklistEditorItem=removeChecklistEditorItem;window.openNewTaskForDate=openNewTaskForDate;window.changeCalendarMonth=changeCalendarMonth;window.toggleTimer=toggleTimer;window.editSession=editSession;window.setLegacyTime=setLegacyTime;window.deleteSession=deleteSession;window.addImprovement=addImprovement;window.dictateImprovement=dictateImprovement;window.updateImprovement=updateImprovement;window.deleteImprovement=deleteImprovement;window.openNewProject=openNewProject;window.openNewNote=openNewNote;window.openNote=openNote;window.renderInboxFiltered=renderInboxFiltered;
+window.openTask=openTask;window.openNewTask=openNewTask;window.moveTask=moveTask;window.setDashboardTab=setDashboardTab;window.setAdminTab=setAdminTab;window.setActivityTab=setActivityTab;window.setTodayTab=setTodayTab;window.setActivityDateFilter=setActivityDateFilter;window.setActivityProjects=setActivityProjects;window.clearActivityFilters=clearActivityFilters;window.openNewRecurring=openNewRecurring;window.editRecurring=editRecurring;window.createTaskFromRecurring=createTaskFromRecurring;window.togglePomodoro=togglePomodoro;window.openProjectWorkspace=openProjectWorkspace;window.setProjectTab=setProjectTab;window.editProject=editProject;window.openNewTaskForProject=openNewTaskForProject;window.removeChecklistEditorItem=removeChecklistEditorItem;window.openNewTaskForDate=openNewTaskForDate;window.changeCalendarMonth=changeCalendarMonth;window.toggleTimer=toggleTimer;window.editSession=editSession;window.setLegacyTime=setLegacyTime;window.deleteSession=deleteSession;window.addImprovement=addImprovement;window.dictateImprovement=dictateImprovement;window.updateImprovement=updateImprovement;window.deleteImprovement=deleteImprovement;window.openNewProject=openNewProject;window.openNewNote=openNewNote;window.openNote=openNote;window.renderInboxFiltered=renderInboxFiltered;
 window.saveJsonAs=saveJsonAs;window.downloadJson=downloadJson;window.openJsonFile=openJsonFile;window.openMergeJson=openMergeJson;window.exportClipboard=exportClipboard;window.exportActivityExcel=exportActivityExcel;window.printActivitySummary=printActivitySummary;window.resetAll=resetAll;window.seedDemo=seedDemo;
 
 setView(state.settings.currentView||"dashboard");
 initializeCloud();
-setInterval(()=>{ if(state.tasks.some(t=>t.timerStartedAt)) renderCurrent(); },1000);
+setInterval(()=>{
+  checkPomodoros();
+  if(state.tasks.some(t=>t.timerStartedAt||t.pomodoroEndsAt)) renderCurrent();
+},1000);
