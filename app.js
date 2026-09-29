@@ -121,7 +121,7 @@ function normalizeState(parsed){
     if(!rule.mode) rule.mode="calendar";
     if(!rule.frequency) rule.frequency="weekly";
     if(rule.interval===undefined) rule.interval=1;
-    if(!rule.startDate) rule.startDate=(rule.createdAt||new Date().toISOString()).slice(0,10);
+    if(!rule.startDate) rule.startDate=todayISO();
     if(rule.lastGeneratedDate===undefined) rule.lastGeneratedDate=null;
     if(rule.lastCompletedDate===undefined) rule.lastCompletedDate=null;
     if(rule.nextDueDate===undefined) rule.nextDueDate=rule.startDate;
@@ -520,7 +520,9 @@ function openProjectWorkspace(id,tab="tasks"){
   const p=state.projects.find(x=>x.id===id); if(!p)return;
   p.openCount=(Number(p.openCount)||0)+1;
   p.lastOpenedAt=new Date().toISOString();
-  p.updatedAt=p.updatedAt||p.lastOpenedAt;
+  state.meta.updatedAt=p.lastOpenedAt;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  queueCloudSave();
   state.settings.currentProjectId=id;
   state.settings.projectTab=tab;
   state.settings.currentView="projectDetail";
@@ -1225,7 +1227,9 @@ function saveTaskFromForm(){
     timeSpentSeconds:existing?.timeSpentSeconds||0,
     legacyTimeSeconds:existing?.legacyTimeSeconds||0,
     legacyTimeReviewed:existing?.legacyTimeReviewed||false,
-    timerStartedAt:status==="doing"?(existing?.timerStartedAt||null):null
+    timerStartedAt:status==="doing"?(existing?.timerStartedAt||null):null,
+    recurringSourceId:existing?.recurringSourceId||null,
+    recurringOccurrenceDate:existing?.recurringOccurrenceDate||null
   };
   if(shouldStopTimerForStatus(status) && existing?.timerStartedAt){
     stopTimer(existing);
