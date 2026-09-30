@@ -248,10 +248,15 @@ async function initializeCloud(){
 const {
   priorityRank,
   priorityManualSort,
+  projectActivityScore,
+  sortProjectsByActivity,
   projectOptionsForContext,
   statusAfterTimerStart,
   shouldStopTimerForStatus,
   sessionDurationSeconds,
+  addIntervalDate,
+  firstCalendarOccurrence,
+  nextCalendarOccurrence,
   buildActivityReport,
   buildActivityWorkbook
 } = CaptureFlowLogic;
