@@ -23,6 +23,37 @@
     return (Number(session?.durationSeconds) || 0) > 14400 && !session?.reviewedAt;
   }
 
+  function projectActivityScore(project, tasks = [], activitySessions = [], now = Date.now()) {
+    const projectTasks = (Array.isArray(tasks) ? tasks : []).filter(task => task?.projectId === project?.id);
+    const projectSessions = (Array.isArray(activitySessions) ? activitySessions : []).filter(session => session?.projectId === project?.id);
+    const clicks = Math.max(0, Number(project?.openCount) || 0);
+    const recencySource = [
+      project?.lastOpenedAt,
+      project?.updatedAt,
+      ...projectTasks.map(task => task?.updatedAt),
+      ...projectSessions.map(session => session?.endedAt || session?.startedAt)
+    ].filter(Boolean).sort().at(-1);
+    const ageDays = recencySource ? Math.max(0, (now - new Date(recencySource).getTime()) / 86400000) : 3650;
+    const recencyWeight = Math.max(0, 30 - Math.min(30, ageDays));
+    const recentTaskWeight = projectTasks.filter(task => {
+      const timestamp = new Date(task?.updatedAt || 0).getTime();
+      return Number.isFinite(timestamp) && now - timestamp <= 14 * 86400000;
+    }).length * 3;
+    const recentSessionWeight = projectSessions.filter(session => {
+      const timestamp = new Date(session?.endedAt || session?.startedAt || 0).getTime();
+      return Number.isFinite(timestamp) && now - timestamp <= 14 * 86400000;
+    }).length * 4;
+    return clicks * 2 + recencyWeight + recentTaskWeight + recentSessionWeight;
+  }
+
+  function sortProjectsByActivity(projects, tasks = [], activitySessions = []) {
+    return [...(Array.isArray(projects) ? projects : [])].sort((a, b) => {
+      const difference = projectActivityScore(b, tasks, activitySessions) - projectActivityScore(a, tasks, activitySessions);
+      if (difference) return difference;
+      return String(a.name || "").localeCompare(String(b.name || ""), "fr", { sensitivity: "base" });
+    });
+  }
+
   function projectOptionsForContext(projects, context) {
     return (Array.isArray(projects) ? projects : [])
       .filter(project => project?.context === context)
@@ -49,6 +80,43 @@
     const date = String(session?.startedAt || "").slice(0, 10);
     if (!date) return false;
     return (!from || date >= from) && (!to || date <= to);
+  }
+
+  function addIntervalDate(dateString, frequency = "daily", interval = 1) {
+    if (!dateString) return "";
+    const date = new Date(dateString + "T12:00:00");
+    const step = Math.max(1, Number(interval) || 1);
+    if (frequency === "monthly") date.setMonth(date.getMonth() + step);
+    else if (frequency === "weekly") date.setDate(date.getDate() + 7 * step);
+    else date.setDate(date.getDate() + step);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function firstCalendarOccurrence(rule) {
+    const startDate = rule?.startDate || "";
+    if (!startDate) return "";
+    if ((rule?.frequency || "weekly") !== "weekly") return startDate;
+    const targetWeekday = Number(rule?.weekday ?? 1);
+    const date = new Date(startDate + "T12:00:00");
+    const offset = (targetWeekday - date.getDay() + 7) % 7;
+    date.setDate(date.getDate() + offset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function nextCalendarOccurrence(rule, fromDate) {
+    const frequency = rule?.frequency || "weekly";
+    const interval = Math.max(1, Number(rule?.interval) || 1);
+    if (!fromDate) return firstCalendarOccurrence(rule);
+    if (frequency !== "weekly") return addIntervalDate(fromDate, frequency, interval);
+    const targetWeekday = Number(rule?.weekday ?? 1);
+    const date = new Date(fromDate + "T12:00:00");
+    if (date.getDay() !== targetWeekday) {
+      const offset = (targetWeekday - date.getDay() + 7) % 7 || 7;
+      date.setDate(date.getDate() + offset);
+      return date.toISOString().slice(0, 10);
+    }
+    date.setDate(date.getDate() + 7 * interval);
+    return date.toISOString().slice(0, 10);
   }
 
   function buildActivityReport(source, filters = {}) {
@@ -269,7 +337,7 @@
     workbook.created = new Date();
     const duration = seconds => Math.max(0, Number(seconds) || 0) / 86400;
     const contextLabel = value => ({ pro: "Professionnel", perso: "Personnel", all: "Tous" })[value] || value;
-    const statusLabel = value => ({ inbox: "Corbeille", today: "À faire aujourd’hui", doing: "En cours", waiting: "En attente", done: "Terminé", well: "Puits", active: "Actif", paused: "En pause", completed: "Terminé" })[value] || value;
+    const statusLabel = value => ({ inbox: "Corbeille", today: "À faire aujourd’hui", doing: "En cours", waiting: "En attente", waiting_reply: "En attente de retour", done: "Terminé", well: "Puits", active: "Actif", paused: "En pause", completed: "Terminé" })[value] || value;
     const priorityLabel = value => ({ urgent: "Urgente", high: "Haute", medium: "Moyenne", low: "Basse" })[value] || value;
     const styleSheet = (sheet, durationColumns = []) => {
       sheet.views = [{ state: "frozen", ySplit: 1 }];
@@ -406,11 +474,16 @@
     priorityManualSort,
     isUnreviewedLegacyTask,
     isUnreviewedLongSession,
+    projectActivityScore,
+    sortProjectsByActivity,
     projectOptionsForContext,
     statusAfterTimerStart,
     shouldStopTimerForStatus,
     sessionDurationSeconds,
     sessionInDateRange,
+    addIntervalDate,
+    firstCalendarOccurrence,
+    nextCalendarOccurrence,
     buildActivityReport,
     buildActivityWorkbook
   };
