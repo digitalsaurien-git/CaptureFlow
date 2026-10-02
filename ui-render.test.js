@@ -11,6 +11,10 @@ function runUi(data, expression) {
       elements.set(id, {
         value: "",
         innerHTML: "",
+        textContent: "",
+        reset: () => {},
+        showModal: () => {},
+        close: () => {},
         classList: { add: () => {}, remove: () => {}, toggle: () => {} }
       });
     }
@@ -87,4 +91,45 @@ test("les cartes projets compactes gardent les métriques essentielles", () => {
   assert.match(html, /progression/);
   assert.match(html, /temps total/);
   assert.doesNotMatch(html, /Description secondaire détaillée/);
+});
+
+
+test("une amélioration terminée disparaît du backlog actif", () => {
+  const html = runUi({
+    meta: { version: 8 },
+    settings: { contextFilter: "pro", priorityFilter: "all" },
+    projects: [], tasks: [], notes: [], recurringTasks: [], activitySessions: [],
+    improvements: [
+      { id: "active", text: "Encore à faire", context: "pro", priority: "high", status: "doing", createdAt: "2026-10-02T08:00:00.000Z" },
+      { id: "done", text: "Déjà terminée", context: "pro", priority: "medium", status: "done", createdAt: "2026-10-02T07:00:00.000Z" }
+    ]
+  }, 'renderImprovements(); globalThis.result=document.getElementById("improvementsView").innerHTML;');
+
+  assert.match(html, /Encore à faire/);
+  assert.doesNotMatch(html, /Déjà terminée/);
+});
+
+test("un nouveau post-it hérite du contexte Personnel courant", () => {
+  const contextValue = runUi({
+    meta: { version: 8 },
+    settings: { contextFilter: "perso", priorityFilter: "all" },
+    projects: [], tasks: [], notes: [], improvements: [], recurringTasks: [], activitySessions: []
+  }, 'openNewNote(); globalThis.result=document.getElementById("noteContext").value;');
+
+  assert.equal(contextValue, "perso");
+});
+
+test("les post-it restent strictement isolés entre Personnel et Professionnel", () => {
+  const html = runUi({
+    meta: { version: 8 },
+    settings: { contextFilter: "perso", priorityFilter: "all" },
+    projects: [], tasks: [], improvements: [], recurringTasks: [], activitySessions: [],
+    notes: [
+      { id: "perso", title: "Maison", content: "Personnel", context: "perso", color: "yellow" },
+      { id: "pro", title: "Bureau", content: "Professionnel", context: "pro", color: "blue" }
+    ]
+  }, 'renderNotes(); globalThis.result=document.getElementById("notesView").innerHTML;');
+
+  assert.match(html, /Maison/);
+  assert.doesNotMatch(html, /Bureau/);
 });
