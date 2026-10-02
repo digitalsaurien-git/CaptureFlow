@@ -203,6 +203,7 @@ async function flushCloudSave(){
       cloudRevision=result.revision||0;
       state=mergeStates(result.data||defaultState,state);
       localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+      renderCurrent();
       cloudSaveRequested=true;
     }else if(!response.ok) throw new Error(result.error||`Erreur ${response.status}`);
     else{
@@ -974,7 +975,7 @@ function deleteImprovement(id){
 }
 function renderImprovements(){
   const rank={urgent:0,high:1,medium:2,low:3};
-  const items=filtered(state.improvements).sort((a,b)=>(rank[a.priority]??9)-(rank[b.priority]??9)||(b.createdAt||"").localeCompare(a.createdAt||""));
+  const items=filtered(state.improvements).filter(item=>item.status!=="done").sort((a,b)=>(rank[a.priority]??9)-(rank[b.priority]??9)||(b.createdAt||"").localeCompare(a.createdAt||""));
   document.getElementById("improvementsView").innerHTML=`
     <div class="card improvement-capture">
       <h3>Capturer une amélioration</h3>
@@ -1302,6 +1303,7 @@ function deleteProject(){
 
 function openNewNote(){
   document.getElementById("noteForm").reset(); document.getElementById("noteId").value="";
+  document.getElementById("noteContext").value=preferredCreationContext();
   document.getElementById("noteDialogTitle").textContent="Nouveau post-it";
   document.getElementById("deleteNoteBtn").classList.add("hidden"); document.getElementById("noteDialog").showModal();
 }
