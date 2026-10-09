@@ -130,6 +130,13 @@ nav{display:grid;gap:7px}.nav-btn{border:0;background:transparent;color:#d4e5e1;
 .project-tab{border:0;background:transparent;padding:11px 15px;color:var(--muted);font-weight:750;border-bottom:3px solid transparent;white-space:nowrap}
 .project-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
 .project-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px}
+.project-task-filters{display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap}
+.project-task-filters .project-tab{background:var(--surface);border-radius:10px 10px 0 0}
+.project-task-filters .badge{margin-left:5px}
+.project-task-groups{display:grid;gap:16px}
+.project-task-group-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.project-task-group-head h3{margin:0}
+.project-reference{border:0;background:var(--surface-2);color:var(--primary);padding:5px 8px;border-radius:8px;text-align:left;font-weight:650}
 .project-task-table .clickable-row{cursor:pointer}.project-task-table .clickable-row:hover{background:var(--surface-2)}
 .row-description{font-size:12px;margin-top:4px}
 .project-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}

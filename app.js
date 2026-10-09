@@ -2,7 +2,7 @@ const STORAGE_KEY = "captureflow_local_v1";
 
 const defaultState = {
   meta: { version: 8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", todayTab: "doing", activityDateFrom: "", activityDateTo: "", activityProjectIds: [], calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectTab: "tasks" },
+  settings: { contextFilter: "all", priorityFilter: "all", currentView: "dashboard", dashboardTab: "overview", adminTab: "backup", activityTab: "summary", todayTab: "doing", activityDateFrom: "", activityDateTo: "", activityProjectIds: [], calendarMonth: new Date().toISOString().slice(0,7), currentProjectId: null, projectsTab: "projects", projectTab: "tasks", projectTaskFilter: "active" },
   projects: [],
   tasks: [],
   notes: [],
@@ -331,7 +331,7 @@ function normalizeOrder(items){
 function moveTask(id,direction,scope="project"){
   const t=state.tasks.find(x=>x.id===id); if(!t)return;
   let items=[];
-  if(scope==="project") items=state.tasks.filter(x=>x.projectId===t.projectId);
+  if(scope==="project") items=state.tasks.filter(x=>x.projectId===t.projectId && (x.status==="done")===(t.status==="done"));
   else if(scope==="today") items=state.tasks.filter(x=>(x.status==="today" || (x.dueDate===todayISO() && !["doing","waiting","waiting_reply","done"].includes(x.status))));
   else items=state.tasks.filter(x=>!x.projectId);
   items=manualTaskSort(items.filter(x=>(priorityRank[x.priority]??9)===(priorityRank[t.priority]??9)));
@@ -499,11 +499,48 @@ function renderKanban(){
   bindDrag();
 }
 
+function setProjectsTab(tab){
+  if(!["projects","tasks"].includes(tab))return;
+  state.settings.projectsTab=tab;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderProjects();
+}
+function setProjectTaskFilter(filter){
+  if(!["active","done"].includes(filter))return;
+  state.settings.projectTaskFilter=filter;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  renderCurrent();
+}
+function projectTaskFilters(tasks){
+  const done=tasks.filter(t=>t.status==="done").length;
+  return `<div class="project-task-filters" aria-label="État des tâches">${[["active","En cours",tasks.length-done],["done","Terminées",done]].map(([key,label,count])=>`<button class="project-tab ${projectTaskFilter()===key?"active":""}" aria-pressed="${projectTaskFilter()===key}" onclick="setProjectTaskFilter('${key}')">${label} <span class="badge">${count}</span></button>`).join("")}</div>`;
+}
+function projectTaskFilter(){
+  return state.settings.projectTaskFilter==="done"?"done":"active";
+}
+function visibleProjectTasks(tasks){
+  return tasks.filter(t=>projectTaskFilter()==="done"?t.status==="done":t.status!=="done");
+}
+function projectTaskTable(tasks,project=null){
+  if(!tasks.length)return empty(projectTaskFilter()==="done"?"Aucune tâche terminée dans ce projet.":"Aucune tâche en cours dans ce projet.");
+  return `<table class="table project-task-table"><thead><tr><th>${project?"Projet":"Ordre"}</th><th>Tâche</th><th>Statut</th><th>Priorité</th><th>Checklist</th><th>Échéance</th><th>Temps</th></tr></thead><tbody>${tasks.map(t=>projectTaskRow(t,project)).join("")}</tbody></table>`;
+}
+function renderProjectTaskGroups(projects){
+  const ids=new Set(projects.map(p=>p.id));
+  const tasks=manualTaskSort(filtered(state.tasks.filter(t=>ids.has(t.projectId))));
+  const groups=projects.map(project=>({project,tasks:visibleProjectTasks(tasks.filter(t=>t.projectId===project.id))})).filter(group=>group.tasks.length);
+  return `${projectTaskFilters(tasks)}<div class="project-task-groups">${groups.length?groups.map(({project,tasks})=>`<section class="card project-task-group">
+    <div class="project-task-group-head"><h3>${esc(project.name)} <span class="badge">${tasks.length} tâche(s)</span></h3><button class="btn small secondary" onclick="openProjectWorkspace('${project.id}')">Ouvrir le projet</button></div>
+    <div class="table-wrap">${projectTaskTable(tasks,project)}</div>
+  </section>`).join(""):empty(projectTaskFilter()==="done"?"Aucune tâche terminée pour les projets sélectionnés.":"Aucune tâche en cours pour les projets sélectionnés.")}</div>`;
+}
 function renderProjects(){
   const projects=sortProjectsByActivity(filtered(state.projects),state.tasks,state.activitySessions);
+  const tab=state.settings.projectsTab==="tasks"?"tasks":"projects";
   document.getElementById("projectsView").innerHTML=`
     <div class="section-title"><h3>${projects.length} projet(s)</h3><button class="btn primary" onclick="openNewProject()">+ Nouveau projet</button></div>
-    <div class="grid project-grid">${projects.length?projects.map(p=>{
+    <div class="project-tabs" aria-label="Vues des projets">${[["projects","Liste des projets"],["tasks","Tâches par projet"]].map(([key,label])=>`<button class="project-tab ${tab===key?"active":""}" aria-pressed="${tab===key}" onclick="setProjectsTab('${key}')">${label}</button>`).join("")}</div>
+    ${tab==="tasks"?renderProjectTaskGroups(projects):`<div class="grid project-grid">${projects.length?projects.map(p=>{
       const tasks=state.tasks.filter(t=>t.projectId===p.id);
       const done=tasks.filter(t=>t.status==="done").length;
       const pct=tasks.length?Math.round(done/tasks.length*100):0;
@@ -525,7 +562,7 @@ function renderProjects(){
         </div>
         ${lastActivity?`<p class="project-last-activity">Dernière activité · ${fmtDateTime(lastActivity)}</p>`:""}
       </article>`;
-    }).join(""):empty("Aucun projet.")}</div>`;
+    }).join(""):empty("Aucun projet.")}</div>`}`;
 }
 function projectStatusLabel(status){
   return ({active:"Actif",paused:"En pause",completed:"Terminé"})[status]||status;
@@ -542,6 +579,7 @@ function openProjectWorkspace(id,tab="tasks"){
   queueCloudSave();
   state.settings.currentProjectId=id;
   state.settings.projectTab=tab;
+  state.settings.projectTaskFilter="active";
   state.settings.currentView="projectDetail";
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
@@ -557,15 +595,15 @@ function setProjectTab(tab){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   renderProjectDetail();
 }
-function projectTaskRow(t){
+function projectTaskRow(t,project=null){
   const checklist=t.checklist||[];
   const checked=checklist.filter(x=>x.done).length;
   const progress=checklist.length?`${checked}/${checklist.length} étapes`:"Aucune checklist";
   return `<tr class="clickable-row">
-    <td class="order-cell">
+    ${project?`<td><button class="project-reference" onclick="openProjectWorkspace('${project.id}')">${esc(project.name)}</button></td>`:`<td class="order-cell">
       <button class="icon-btn" onclick="event.stopPropagation();moveTask('${t.id}',-1,'project')" title="Monter">↑</button>
       <button class="icon-btn" onclick="event.stopPropagation();moveTask('${t.id}',1,'project')" title="Descendre">↓</button>
-    </td>
+    </td>`}
     <td onclick="openTask('${t.id}')"><strong>${esc(t.title)}</strong>${t.description?`<div class="muted row-description">${esc(t.description).slice(0,110)}</div>`:""}${t.remaining?`<div class="remaining-row"><strong>Reste :</strong> ${esc(t.remaining).slice(0,120)}</div>`:""}</td>
     <td onclick="openTask('${t.id}')"><span class="badge">${taskStatusLabel(t.status)}</span></td>
     <td onclick="openTask('${t.id}')">${priorityIcon(t.priority)} ${({urgent:"Urgente",high:"Haute",medium:"Moyenne",low:"Basse"})[t.priority]||""}</td>
@@ -590,7 +628,8 @@ function renderProjectDetail(){
 
   if(tab==="tasks"){
     body=`<div class="project-toolbar"><button class="btn primary" onclick="openNewTaskForProject('${id}')">+ Nouvelle tâche</button></div>
-      <div class="card table-wrap">${tasks.length?`<table class="table project-task-table"><thead><tr><th>Ordre</th><th>Tâche</th><th>Statut</th><th>Priorité</th><th>Checklist</th><th>Échéance</th><th>Temps</th></tr></thead><tbody>${tasks.map(projectTaskRow).join("")}</tbody></table>`:empty("Aucune tâche dans ce projet.")}</div>`;
+      ${projectTaskFilters(tasks)}
+      <div class="card table-wrap">${projectTaskTable(visibleProjectTasks(tasks))}</div>`;
   }else if(tab==="kanban"){
     body=`<div class="project-toolbar"><button class="btn primary" onclick="openNewTaskForProject('${id}')">+ Nouvelle tâche</button></div>
       <div class="kanban">${kanbanColumns.map(([key,label])=>{
