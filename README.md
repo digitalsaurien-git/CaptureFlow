@@ -4,6 +4,8 @@ CaptureFlow réunit dans une seule application les tâches, projets, post-it, t�
 
 ## Améliorations du suivi d’activité
 
+- Le menu **Projets** propose **Liste des projets** et **Tâches par projet** : les tâches sont regroupées avec une référence cliquable vers leur projet, dans l’ordre d’activité habituel et selon les filtres courants.
+- Dans chaque projet, l’onglet **Tâches** sépare **En cours** (tous les statuts sauf Terminé) et **Terminées**, avec compteurs. La vue active s’ouvre par défaut ; terminer une tâche la déplace automatiquement dans Terminées. Les mini-tâches/checklists restent inchangées.
 - Les cartes projet affichent une synthèse compacte : contexte, statut, progression, nombre de tâches, temps total et dernière activité.
 - La vue **Aujourd’hui** sépare les tâches **En cours**, **À faire aujourd’hui** et **En attente** sans dupliquer une même tâche.
 - Les listes de projets des formulaires suivent le contexte sélectionné et restent triées alphabétiquement.

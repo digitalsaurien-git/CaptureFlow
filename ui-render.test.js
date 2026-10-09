@@ -133,3 +133,89 @@ test("les post-it restent strictement isolés entre Personnel et Professionnel",
   assert.match(html, /Maison/);
   assert.doesNotMatch(html, /Bureau/);
 });
+
+function projectFixture(settings={}) {
+  return {
+    meta: { version: 8 },
+    settings: { contextFilter: "all", priorityFilter: "all", currentView: "projectDetail", currentProjectId: "p1", ...settings },
+    projects: [
+      { id: "p1", name: "Alpha & RH", context: "pro", status: "active" },
+      { id: "p2", name: "Bravo", context: "pro", status: "paused" },
+      { id: "p3", name: "Maison", context: "perso", status: "active" }
+    ],
+    tasks: [
+      ...["inbox","today","doing","waiting","waiting_reply","well"].map((status,i)=>({ id: status, projectId: "p1", title: `Action ${status}`, status, context: "pro", priority: "high", manualOrder: i*2 })),
+      { id: "done", projectId: "p1", title: "Action achevée", status: "done", context: "pro", priority: "high", manualOrder: 1 },
+      { id: "bravo", projectId: "p2", title: "Action Bravo", status: "today", context: "pro", priority: "low" },
+      { id: "perso", projectId: "p3", title: "Action maison", status: "doing", context: "perso", priority: "high" },
+      { id: "free", title: "Action sans projet", status: "doing", context: "pro", priority: "high" }
+    ],
+    notes: [], improvements: [], recurringTasks: [], activitySessions: []
+  };
+}
+
+test("la liste d'un projet garde tous les statuts non terminés et sépare les terminées", () => {
+  const html = runUi(projectFixture(), 'renderProjectDetail(); globalThis.result=document.getElementById("projectDetailView").innerHTML;');
+  for (const status of ["inbox","today","doing","waiting","waiting_reply","well"]) assert.match(html, new RegExp(`Action ${status}`));
+  assert.doesNotMatch(html, /Action achevée|Action Bravo|Action maison|Action sans projet/);
+  assert.match(html, /En cours <span class="badge">6/);
+  assert.match(html, /Terminées <span class="badge">1/);
+
+  const doneHtml = runUi(projectFixture(), 'setProjectTaskFilter("done"); globalThis.result=document.getElementById("projectDetailView").innerHTML;');
+  assert.match(doneHtml, /Action achevée/);
+  assert.doesNotMatch(doneHtml, /Action doing|Action waiting/);
+});
+
+test("la vue tâches par projet regroupe les tâches avec références et respecte le contexte", () => {
+  const html = runUi(projectFixture({ currentView: "projects", projectsTab: "tasks", contextFilter: "pro" }), 'renderProjects(); globalThis.result=document.getElementById("projectsView").innerHTML;');
+  assert.match(html, /Liste des projets/);
+  assert.match(html, /Tâches par projet/);
+  assert.equal((html.match(/<section class="card project-task-group">/g)||[]).length, 2);
+  assert.match(html, /project-reference[^>]*onclick="openProjectWorkspace\('p1'\)"/);
+  assert.match(html, /Alpha &amp; RH/);
+  assert.match(html, /Action Bravo/);
+  assert.doesNotMatch(html, /Action maison|Action sans projet|Action achevée/);
+});
+
+test("les filtres de priorité et les terminées s'appliquent aussi à la vue groupée", () => {
+  const data = projectFixture({ currentView: "projects", projectsTab: "tasks", contextFilter: "pro", priorityFilter: "high" });
+  const html = runUi(data, 'renderProjects(); globalThis.result=document.getElementById("projectsView").innerHTML;');
+  assert.doesNotMatch(html, /Action Bravo|Action achevée/);
+  const doneHtml = runUi(data, 'setProjectTaskFilter("done"); globalThis.result=document.getElementById("projectsView").innerHTML;');
+  assert.match(doneHtml, /Action achevée/);
+  assert.doesNotMatch(doneHtml, /Action doing|Action Bravo/);
+});
+
+test("terminer puis rouvrir une tâche la déplace automatiquement entre les deux listes", () => {
+  const result = runUi(projectFixture(), `
+    openTask("doing");
+    document.getElementById("taskProject").value="p1";
+    document.getElementById("taskStatus").value="done";
+    saveTaskFromForm();
+    const active=document.getElementById("projectDetailView").innerHTML;
+    setProjectTaskFilter("done");
+    const done=document.getElementById("projectDetailView").innerHTML;
+    document.getElementById("taskStatus").value="waiting_reply";
+    saveTaskFromForm();
+    const doneAfterReopen=document.getElementById("projectDetailView").innerHTML;
+    setProjectTaskFilter("active");
+    globalThis.result={active,done,doneAfterReopen,activeAfterReopen:document.getElementById("projectDetailView").innerHTML};
+  `);
+  assert.doesNotMatch(result.active, /Action doing/);
+  assert.match(result.done, /Action doing/);
+  assert.doesNotMatch(result.doneAfterReopen, /Action doing/);
+  assert.match(result.activeAfterReopen, /Action doing/);
+});
+
+test("réordonner une tâche active ignore les tâches terminées intercalées", () => {
+  const result = runUi(projectFixture(), 'moveTask("inbox",1,"project"); globalThis.result=state.tasks.map(t=>({id:t.id,order:t.manualOrder}));');
+  assert.equal(result.find(t=>t.id==="inbox").order, 2);
+  assert.equal(result.find(t=>t.id==="today").order, 0);
+  assert.equal(result.find(t=>t.id==="done").order, 1);
+});
+
+test("ouvrir un projet remet la liste active par défaut, même après consultation des terminées", () => {
+  const html = runUi(projectFixture({ projectTaskFilter: "done" }), 'openProjectWorkspace("p1"); globalThis.result=document.getElementById("projectDetailView").innerHTML;');
+  assert.match(html, /Action doing/);
+  assert.doesNotMatch(html, /Action achevée/);
+});
